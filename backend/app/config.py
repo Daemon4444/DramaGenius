@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     OSS_UPLOAD_PREFIX: str = "dramagenius"
 
     # ── 本地持久化数据目录（视频/上传/备份，不进 git） ──
-    LOCAL_DATA_DIR: str = "/root/dramagenius-local"
+    LOCAL_DATA_DIR: str = "static"
 
     # ── JWT ──
     JWT_SECRET: str = "jwt-secret-change-in-production"

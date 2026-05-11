@@ -258,8 +258,8 @@ export default function ProjectsPage() {
           const data = await workspaceApi.getProjects()
           const list = data.projects || []
           const apiProjects = list.map(p => {
-            if (DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
-            if (p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
+            if (ENABLE_DEMO_DATA && DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
+            if (ENABLE_DEMO_DATA && p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
             return {
               id: p.id,
               title: p.title,

@@ -158,12 +158,12 @@ async def get_scripts(
     if settings.DEV_SKIP_DB:
         if not _demo_enabled():
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时视频剧本不可用于生产验证")
-        return _get_demo_scripts()
+        return _get_demo_scripts(project_id)
 
     if not project_id:
         if not _demo_enabled():
             raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
-        return _get_demo_scripts()
+        return _get_demo_scripts(project_id)
 
     result = await db.execute(
         select(VideoScript)
@@ -694,8 +694,38 @@ def _get_demo_hotspots(episode_key=None):
     return data
 
 
-def _get_demo_scripts():
+def _get_demo_scripts(project_id: Optional[str] = None):
     """内置 Demo 剧本"""
+    if project_id == "demo-proj-001":
+        return [
+            {
+                "id": "sweet-ep1", "title": "第一集 · 逃婚清晨", "episode": 1, "branch": None, "status": "published",
+                "roles": [
+                    {"name": "苏念念", "desc": "逃跑新娘，外柔内韧，正在寻找真正的自由"},
+                    {"name": "陆景琛", "desc": "冷面总裁，控制欲强但内心缺乏安全感"},
+                ],
+                "scenes": [
+                    {"id": 1, "visual": "清晨的豪华酒店套房，婚纱挂在落地窗前，苏念念穿着白色衬衫站在窗边，阳光照在她紧张却坚定的脸上。", "audio": "苏念念低声：这一次，我不要被任何人安排。"},
+                    {"id": 2, "visual": "走廊尽头，陆景琛带着保镖快步赶来，镜头低角度拍摄他的黑色皮鞋踏过散落的花瓣。", "audio": "急促脚步声，远处婚礼进行曲被门缝切碎。"},
+                    {"id": 3, "visual": "苏念念从员工通道奔跑，裙摆掠过清洁车，镜头手持追随，制造紧张的逃离感。", "audio": "苏念念喘息：别回头，千万别回头。"},
+                    {"id": 4, "visual": "地下车库，陆景琛隔着车窗看见苏念念，两人短暂对视，冷色灯光把情绪压到极致。", "audio": "陆景琛：苏念念，你真的敢走？"},
+                ],
+            },
+            {
+                "id": "sweet-ep2", "title": "第二集 · 雨夜契约", "episode": 2, "branch": None, "status": "published",
+                "roles": [
+                    {"name": "苏念念", "desc": "逃离婚礼后被迫面对现实压力"},
+                    {"name": "陆景琛", "desc": "试图用契约重新掌控关系的总裁"},
+                ],
+                "scenes": [
+                    {"id": 1, "visual": "雨夜便利店外，苏念念抱着纸袋躲雨，霓虹灯映出她湿漉漉的发梢。", "audio": "雨声密集，便利店门铃叮咚作响。"},
+                    {"id": 2, "visual": "黑色轿车停在路边，陆景琛撑伞下车，伞面遮住半张脸，只露出复杂的眼神。", "audio": "陆景琛：跟我回去，我给你重新谈条件。"},
+                    {"id": 3, "visual": "两人在雨幕中对峙，苏念念接过合同又慢慢撕开，纸片被雨水打湿贴在地面。", "audio": "苏念念：我不是你的项目，也不是你的资产。"},
+                ],
+            },
+        ]
+    if project_id and project_id not in {"demo-proj-002", "proj-fuhua"}:
+        return []
     return [
         {
             "id": "ep1", "title": "第一集 · 病榻回响", "episode": 1, "branch": None, "status": "published",

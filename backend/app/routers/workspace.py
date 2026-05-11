@@ -31,8 +31,8 @@ settings = get_settings()
 def _demo_enabled() -> bool:
     return bool(settings.DEV_SKIP_DB and settings.ALLOW_DEMO_DATA)
 
-# Demo 模式下的内存存储 — 预填充默认项目（user_id 用通配 "demo"）
-_DEMO_USER = "demo"
+# Demo 模式下的内存存储。预置项目只给未登录/默认 demo 用户，不跨账号泄漏。
+_DEMO_USER = "00000000-0000-0000-0000-000000000001"
 _demo_projects = {
     "demo-proj-001": {
         "id": "demo-proj-001",
@@ -670,7 +670,7 @@ async def get_project(
         if not settings.ALLOW_DEMO_DATA:
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目详情不可用于生产验证")
         proj = _demo_projects.get(project_id)
-        if not proj:
+        if not proj or proj.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="项目不存在")
         return proj
 
@@ -729,7 +729,8 @@ async def delete_project(
     if settings.DEV_SKIP_DB:
         if not settings.ALLOW_DEMO_DATA:
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目删除不可用于生产验证")
-        if project_id not in _demo_projects:
+        project = _demo_projects.get(project_id)
+        if not project or project.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="项目不存在")
         del _demo_projects[project_id]
         return {"success": True, "id": project_id}
@@ -819,8 +820,12 @@ async def list_projects(
     if settings.DEV_SKIP_DB:
         if not settings.ALLOW_DEMO_DATA:
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目列表不可用于生产验证")
-        # Demo 模式：返回内存中的所有项目
-        return {"projects": list(_demo_projects.values())}
+        return {
+            "projects": [
+                p for p in _demo_projects.values()
+                if p.get("user_id") == user_id
+            ]
+        }
 
     result = await db.execute(
         select(Project).where(Project.user_id == user_id)

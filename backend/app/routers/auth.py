@@ -73,9 +73,10 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """用户登录 - Demo 模式：任意账密均可进入"""
+    """用户登录"""
     if settings.DEV_SKIP_DB or db is None:
-        return create_tokens("demo-user-001")
+        user_key = req.email.strip().lower() or "demo@example.com"
+        return create_tokens(f"demo:{user_key}")
 
     # 查找用户，存在则用其 ID；不存在也允许登录（Demo 放行）
     result = await db.execute(select(User).where(User.email == req.email))
