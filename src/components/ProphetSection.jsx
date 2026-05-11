@@ -766,11 +766,11 @@ export default function ProphetSection() {
           </div>
 
           {/* ===== 右侧关键词气泡热力图 ===== */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-[320px]" style={{ overflow: 'visible' }}>
+          <div className="absolute right-4 top-1/2 -translate-y-[46%] w-[420px]" style={{ overflow: 'visible' }}>
             {/* 气泡区域 */}
-            <div className="relative h-[400px]">
+            <div className="relative h-[520px]">
               {/* SVG 热力底图 + 气泡连线 */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 320 400" style={{ overflow: 'visible' }}>
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 420 520" style={{ overflow: 'visible' }}>
                 <defs>
                   <filter id="heatGlow" x="-80%" y="-80%" width="260%" height="260%">
                     <feGaussianBlur stdDeviation="30" />
@@ -785,16 +785,16 @@ export default function ProphetSection() {
                   </radialGradient>
                 </defs>
                 {/* 中心大面积暖光 */}
-                <circle cx="160" cy="195" r="180" fill="url(#centerGlow)" />
+                <circle cx="210" cy="230" r="220" fill="url(#centerGlow)" />
                 {/* 动态热力色斑 - 跟随气泡位置 */}
                 {(() => {
                   const sorted = [...currentKeywords.keys()].sort((a, b) => currentKeywords[b].score - currentKeywords[a].score)
-                  const CX = 160, CY = 195
+                  const CX = 210, CY = 230
                   const rings = [
-                    { count: 2, radius: 0, angleOff: 0.8 },
-                    { count: 4, radius: 58, angleOff: 0.3 },
-                    { count: 6, radius: 110, angleOff: 0.1 },
-                    { count: 6, radius: 155, angleOff: 0.6 },
+                    { count: 1, radius: 0, angleOff: 0 },
+                    { count: 5, radius: 100, angleOff: 0.08 },
+                    { count: 7, radius: 180, angleOff: 0.18 },
+                    { count: 5, radius: 235, angleOff: 0.02 },
                   ]
                   let idx = 0
                   return sorted.slice(0, 14).map((ki) => {
@@ -806,8 +806,8 @@ export default function ProphetSection() {
                     const prevCount = rings.slice(0, ringIdx).reduce((s, r) => s + r.count, 0)
                     const posInRing = idx - prevCount
                     const angle = (posInRing / ring.count) * Math.PI * 2 + ring.angleOff * Math.PI
-                    const jx = Math.sin(idx * 3.7) * 8
-                    const jy = Math.cos(idx * 2.3) * 8
+                    const jx = Math.sin(idx * 3.7) * 6
+                    const jy = Math.cos(idx * 2.3) * 6
                     const x = CX + Math.cos(angle) * ring.radius + jx
                     const y = CY + Math.sin(angle) * ring.radius + jy
                     const kw = currentKeywords[ki]
@@ -831,12 +831,12 @@ export default function ProphetSection() {
               {/* 气泡关键词 */}
               {(() => {
                 const sorted = [...currentKeywords.keys()].sort((a, b) => currentKeywords[b].score - currentKeywords[a].score)
-                const CX = 160, CY = 195
+                const CX = 210, CY = 230
                 const rings = [
-                  { count: 2, radius: 0, angleOff: 0.8 },
-                  { count: 4, radius: 58, angleOff: 0.3 },
-                  { count: 6, radius: 110, angleOff: 0.1 },
-                  { count: 6, radius: 155, angleOff: 0.6 },
+                  { count: 1, radius: 0, angleOff: 0 },
+                  { count: 5, radius: 100, angleOff: 0.08 },
+                  { count: 7, radius: 180, angleOff: 0.18 },
+                  { count: 5, radius: 235, angleOff: 0.02 },
                 ]
                 const posMap = new Map()
                 let idx = 0
@@ -844,8 +844,8 @@ export default function ProphetSection() {
                   const count = Math.min(ring.count, sorted.length - idx)
                   for (let j = 0; j < count; j++) {
                     const angle = (j / ring.count) * Math.PI * 2 + ring.angleOff * Math.PI
-                    const jx = Math.sin(idx * 3.7) * 8
-                    const jy = Math.cos(idx * 2.3) * 8
+                    const jx = Math.sin(idx * 3.7) * 6
+                    const jy = Math.cos(idx * 2.3) * 6
                     posMap.set(sorted[idx], {
                       x: CX + Math.cos(angle) * ring.radius + jx,
                       y: CY + Math.sin(angle) * ring.radius + jy,
@@ -856,8 +856,8 @@ export default function ProphetSection() {
                 while (idx < sorted.length) {
                   const angle = (idx * 2.39996) + 0.5
                   posMap.set(sorted[idx], {
-                    x: CX + Math.cos(angle) * 185 + Math.sin(idx * 2.8) * 8,
-                    y: CY + Math.sin(angle) * 185 + Math.cos(idx * 3.1) * 8,
+                    x: CX + Math.cos(angle) * 245 + Math.sin(idx * 2.8) * 6,
+                    y: CY + Math.sin(angle) * 245 + Math.cos(idx * 3.1) * 6,
                   })
                   idx++
                 }
