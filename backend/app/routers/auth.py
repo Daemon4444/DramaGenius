@@ -73,23 +73,19 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """用户登录"""
-    if settings.DEV_SKIP_DB:
-        if not settings.ALLOW_DEMO_DATA:
-            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时认证不可用于生产验证")
-        # Demo 模式：任意账密可登录
+    """用户登录 - Demo 模式：任意账密均可进入"""
+    if settings.DEV_SKIP_DB or db is None:
         return create_tokens("demo-user-001")
 
+    # 查找用户，存在则用其 ID；不存在也允许登录（Demo 放行）
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(req.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+    if user:
+        return create_tokens(str(user.id))
 
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="账户已被禁用")
-
-    return create_tokens(str(user.id))
+    # 用户不存在时使用默认 demo 用户
+    return create_tokens("00000000-0000-0000-0000-000000000001")
 
 
 @router.post("/refresh", response_model=TokenResponse)

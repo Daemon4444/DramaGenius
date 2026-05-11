@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     QWEN_MODEL_TURBO: str = "qwen3.5-plus"
 
     # ── DashScope Video (百炼视频生成) ──
-    VIDEO_MODEL_DEFAULT: str = "wan2.1-t2v-turbo"
+    VIDEO_MODEL_DEFAULT: str = "wanx2.1-t2v-turbo"
     VIDEO_API_BASE: str = "https://dashscope.aliyuncs.com/api/v1"
     HAPPYHORSE_T2V_MODEL: str = "happyhorse-1.0-t2v"
     HAPPYHORSE_I2V_MODEL: str = "happyhorse-1.0-i2v"
@@ -72,15 +72,17 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:5180",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:5180",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         # 公网 IP 访问
-        "http://8.131.68.6",
-        "http://8.131.68.6:3000",
-        "http://8.131.68.6:5173",
-        "http://8.131.68.6:8080",
+        "http://47.94.253.97",
+        "http://47.94.253.97:5180",
+        "http://47.94.253.97:3000",
+        "http://47.94.253.97:8080",
     ]
 
     # ── Celery ──

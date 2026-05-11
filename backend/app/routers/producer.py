@@ -617,20 +617,31 @@ async def get_storyline(
 
 @router.get("/videos/{video_name}")
 async def serve_video(video_name: str):
-    """提供本地演示视频文件下载/流式播放"""
-    if not _demo_enabled():
-        raise HTTPException(status_code=404, detail="生产模式不提供 mock_assets 视频")
+    """提供视频文件下载/流式播放（优先本地缓存，其次 Mock 资源）"""
+    from urllib.parse import unquote
+    video_name = unquote(video_name)
+
+    # 优先从本地缓存目录查找（真实生成的视频）
+    cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "videos")
+    cache_path = os.path.join(cache_dir, video_name)
+    if os.path.exists(cache_path):
+        return FileResponse(
+            cache_path,
+            media_type="video/mp4",
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400"}
+        )
+
+    # 其次从 Mock 资源目录查找
     video_dir = os.path.join(MOCK_DIR, "videos")
     video_path = os.path.join(video_dir, video_name)
+    if os.path.exists(video_path):
+        return FileResponse(
+            video_path,
+            media_type="video/mp4",
+            headers={"Accept-Ranges": "bytes"}
+        )
 
-    if not os.path.exists(video_path):
-        raise HTTPException(status_code=404, detail="视频文件不存在")
-
-    return FileResponse(
-        video_path,
-        media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes"}
-    )
+    raise HTTPException(status_code=404, detail="视频文件不存在")
 
 
 # ==============================
@@ -890,10 +901,26 @@ async def video_generate(req: VideoGenerateRequest):
 
 @router.get("/video/status/{task_id}")
 async def video_status(task_id: str):
-    """查询 WAN 视频生成任务状态"""
+    """查询 WAN 视频生成任务状态，成功时自动缓存视频到本地"""
     from app.services.video_service import video_service
+    import httpx
     try:
         result = await video_service.check_status(task_id)
+        # 视频生成成功时，下载到本地并替换 URL
+        if result.get("status") == "SUCCEEDED" and result.get("video_url"):
+            video_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "videos")
+            os.makedirs(video_dir, exist_ok=True)
+            local_filename = f"{task_id}.mp4"
+            local_path = os.path.join(video_dir, local_filename)
+            if not os.path.exists(local_path):
+                # 下载视频到本地
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.get(result["video_url"])
+                    if resp.status_code == 200:
+                        with open(local_path, "wb") as f:
+                            f.write(resp.content)
+            # 返回本地代理 URL
+            result["video_url"] = f"/api/producer/videos/{local_filename}"
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
