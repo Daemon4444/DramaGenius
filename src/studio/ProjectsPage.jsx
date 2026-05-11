@@ -20,20 +20,8 @@ const FUHUA_PROJECT = {
   stages: { prophet: true, soul: true, arbiter: true, script: true, producer: true },
 }
 
-// Demo 项目数据（始终注入）
+// Demo 项目数据（本地演示备用）
 const DEMO_PROJECTS = {
-  'demo-proj-001': {
-    id: 'demo-proj-001',
-    title: '霸总甜宠：总裁的逃跑新娘',
-    concept: '现代都市甜宠短剧 · 女性向 · 8集连续剧',
-    status: 'in_progress',
-    progress: 45,
-    updatedAt: '2026-04-17',
-    createdAt: '2026-04-10',
-    wordCount: 24800,
-    episodeCount: 8,
-    stages: { prophet: true, soul: true, arbiter: true, script: false, producer: false },
-  },
   'demo-proj-002': {
     id: 'demo-proj-002',
     title: '数字芯尘：意识觉醒',
@@ -51,7 +39,6 @@ const DEMO_PROJECTS = {
 // 模拟项目数据（Demo 模式备用）
 const MOCK_PROJECTS = [
   FUHUA_PROJECT,
-  DEMO_PROJECTS['demo-proj-001'],
   DEMO_PROJECTS['demo-proj-002'],
 ]
 

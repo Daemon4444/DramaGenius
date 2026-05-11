@@ -34,14 +34,14 @@ def _demo_enabled() -> bool:
 # Demo 模式下的内存存储。预置项目只给未登录/默认 demo 用户，不跨账号泄漏。
 _DEMO_USER = "00000000-0000-0000-0000-000000000001"
 _demo_projects = {
-    "demo-proj-001": {
-        "id": "demo-proj-001",
+    "proj-fuhua": {
+        "id": "proj-fuhua",
         "user_id": _DEMO_USER,
-        "title": "霸总甜宠：总裁的逃跑新娘",
-        "concept": "现代都市甜宠短剧",
-        "genre": "甜宠",
-        "status": "in_progress",
-        "created_at": "2026-04-10T14:30:00",
+        "title": "浮华陷阱",
+        "concept": "都市悬疑互动短剧，破产千金与商业死神的权力博弈",
+        "genre": "都市悬疑",
+        "status": "completed",
+        "created_at": "2026-04-23T12:00:00",
         "characters": [],
         "episodes": [],
     },

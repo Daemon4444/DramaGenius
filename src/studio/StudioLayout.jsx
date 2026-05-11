@@ -7,14 +7,12 @@ import { workspaceApi } from '../services/api'
    ───────────────────────────────────────────── */
 
 const PROJECT_TITLES = {
-  'demo-proj-001': '霸总甜宠：总裁的逃跑新娘',
   'demo-proj-002': '数字芯尘：意识觉醒',
   'proj-fuhua': '浮华陷阱',
 }
 const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const STEP_COMPLETION = {
-  'demo-proj-001': ['overview', 'prophet', 'soul', 'arbiter'],
   'demo-proj-002': ['overview', 'prophet', 'soul', 'arbiter', 'script', 'demo'],
   'proj-fuhua': ['overview', 'prophet', 'soul', 'arbiter', 'script', 'producer', 'demo'],
 }
