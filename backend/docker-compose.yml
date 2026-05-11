@@ -1,0 +1,175 @@
+# DramaGenius 本地开发环境
+# 启动命令: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # ============ 应用服务 ============
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dramagenius-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://drama:drama123@postgres:5432/dramagenius
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-dramagenius-dev-secret-key-2026}
+      - ENVIRONMENT=development
+    volumes:
+      - ./app:/app/app:ro  # 热重载开发代码
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # Celery Worker - 异步任务处理
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dramagenius-celery
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://drama:drama123@postgres:5432/dramagenius
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+    depends_on:
+      - redis
+      - postgres
+    command: celery -A app.tasks worker --loglevel=info --concurrency=2
+    volumes:
+      - ./app:/app/app:ro
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # Celery Beat - 定时任务调度（爬虫）
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dramagenius-beat
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery-worker
+    command: celery -A app.tasks beat --loglevel=info
+    volumes:
+      - ./app:/app/app:ro
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # ============ 数据服务 ============
+  
+  # PostgreSQL - 主数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: dramagenius-postgres
+    environment:
+      POSTGRES_USER: drama
+      POSTGRES_PASSWORD: drama123
+      POSTGRES_DB: dramagenius
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drama -d dramagenius"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # Redis - 缓存 + 任务队列
+  redis:
+    image: redis:7-alpine
+    container_name: dramagenius-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # Elasticsearch - 舆情数据检索
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: dramagenius-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - dramagenius-net
+    restart: unless-stopped
+
+  # ============ 可选服务 ============
+  
+  # Kibana - ES 可视化（可选）
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    container_name: dramagenius-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - dramagenius-net
+    profiles:
+      - debug  # 仅 docker-compose --profile debug up 时启动
+
+  # pgAdmin - 数据库管理（可选）
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dramagenius-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dramagenius.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - dramagenius-net
+    profiles:
+      - debug
+
+# ============ 网络与卷 ============
+networks:
+  dramagenius-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  es_data:

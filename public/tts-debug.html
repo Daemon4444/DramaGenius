@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>DramaGenius TTS 诊断</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { color: #00d4ff; }
+  .test { margin: 10px 0; padding: 10px; border: 1px solid #333; border-radius: 6px; }
+  .pass { border-color: #4caf50; background: #1b3a1b; }
+  .fail { border-color: #f44336; background: #3a1b1b; }
+  .pending { border-color: #ff9800; background: #3a2f1b; }
+  button { background: #00d4ff; color: #000; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 14px; }
+  button:hover { background: #00b8d4; }
+  #log { white-space: pre-wrap; font-size: 12px; max-height: 400px; overflow-y: auto; background: #0d0d1a; padding: 10px; border-radius: 6px; margin-top: 10px; }
+  audio { margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>DramaGenius TTS 诊断工具</h1>
+<p>当前页面: <span id="pageUrl"></span></p>
+<p>时间: <span id="timestamp"></span></p>
+
+<div id="tests"></div>
+
+<button onclick="runAll()">开始诊断</button>
+<button onclick="testTTSPlay()">测试 TTS 播放</button>
+
+<div id="audioContainer"></div>
+<div id="log"></div>
+
+<script>
+document.getElementById('pageUrl').textContent = location.href;
+document.getElementById('timestamp').textContent = new Date().toISOString();
+
+const logEl = document.getElementById('log');
+const testsEl = document.getElementById('tests');
+
+function log(msg) {
+  logEl.textContent += msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(msg);
+}
+
+function addTest(name, status, detail) {
+  const div = document.createElement('div');
+  div.className = 'test ' + status;
+  div.innerHTML = '<strong>' + name + '</strong>: ' + detail;
+  testsEl.appendChild(div);
+  return div;
+}
+
+async function runAll() {
+  testsEl.innerHTML = '';
+  logEl.textContent = '';
+
+  // Test 1: Relative URL resolution
+  const relUrl = new URL('/api/soul/tts', location.origin).href;
+  addTest('URL 解析', 'pass', '相对路径 /api/soul/tts 解析为: <b>' + relUrl + '</b>');
+  log('✅ URL 解析: ' + relUrl);
+
+  // Test 2: Simple GET to check proxy
+  log('\n--- Test 2: GET /api/health ---');
+  try {
+    const r = await fetch('/health');
+    const d = await r.text();
+    addTest('GET /health', r.ok ? 'pass' : 'fail', 'status=' + r.status + ' body=' + d.substring(0, 100));
+    log('GET /health => ' + r.status + ' ' + d.substring(0, 100));
+  } catch (e) {
+    addTest('GET /health', 'fail', e.name + ': ' + e.message);
+    log('❌ GET /health => ' + e.name + ': ' + e.message);
+  }
+
+  // Test 3: OPTIONS preflight simulation
+  log('\n--- Test 3: OPTIONS preflight ---');
+  try {
+    const r = await fetch('/api/soul/tts', { method: 'OPTIONS' });
+    addTest('OPTIONS /api/soul/tts', r.ok ? 'pass' : 'fail', 'status=' + r.status);
+    log('OPTIONS => ' + r.status);
+  } catch (e) {
+    addTest('OPTIONS preflight', 'fail', e.name + ': ' + e.message);
+    log('❌ OPTIONS => ' + e.name + ': ' + e.message);
+  }
+
+  // Test 4: Actual POST TTS (small text)
+  log('\n--- Test 4: POST /api/soul/tts ---');
+  const ttsDiv = addTest('POST TTS', 'pending', '请求中...');
+  const startTime = performance.now();
+  try {
+    const r = await fetch('/api/soul/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: '你好',
+        voice: 'longxiaochun_v2',
+        speech_rate: 1.0,
+        pitch_rate: 1.0,
+      }),
+    });
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+    log('POST status: ' + r.status + ' (' + elapsed + 's)');
+    log('Content-Type: ' + r.headers.get('content-type'));
+
+    if (r.ok) {
+      const blob = await r.blob();
+      log('Blob size: ' + blob.size + ' bytes, type: ' + blob.type);
+      ttsDiv.className = 'test pass';
+      ttsDiv.innerHTML = '<strong>POST TTS</strong>: status=' + r.status +
+        ' size=' + blob.size + 'B type=' + (blob.type || r.headers.get('content-type')) +
+        ' time=' + elapsed + 's';
+
+      // Try playing
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.controls = true;
+      document.getElementById('audioContainer').innerHTML = '';
+      document.getElementById('audioContainer').appendChild(audio);
+      log('✅ 音频已准备播放');
+    } else {
+      const text = await r.text();
+      ttsDiv.className = 'test fail';
+      ttsDiv.innerHTML = '<strong>POST TTS</strong>: HTTP ' + r.status + ' ' + text.substring(0, 200);
+      log('❌ HTTP ' + r.status + ': ' + text.substring(0, 200));
+    }
+  } catch (e) {
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+    ttsDiv.className = 'test fail';
+    ttsDiv.innerHTML = '<strong>POST TTS</strong>: ' + e.name + ': ' + e.message + ' (' + elapsed + 's)';
+    log('❌ ' + e.name + ': ' + e.message + ' (after ' + elapsed + 's)');
+    log('Stack: ' + (e.stack || 'N/A'));
+  }
+
+  // Test 5: Direct backend (cross-origin, will fail if port 8000 blocked)
+  log('\n--- Test 5: Direct backend http://localhost:8000/api/soul/tts ---');
+  try {
+    const r = await fetch('http://localhost:8000/api/soul/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '测试', voice: 'longxiaochun_v2', speech_rate: 1.0, pitch_rate: 1.0 }),
+    });
+    addTest('直连 localhost:8000', r.ok ? 'pass' : 'fail', 'status=' + r.status);
+    log('Direct backend => ' + r.status);
+  } catch (e) {
+    addTest('直连 localhost:8000', 'fail', e.name + ': ' + e.message + ' (预期：用户非本机访问时会失败)');
+    log('❌ Direct backend => ' + e.name + ': ' + e.message);
+  }
+
+  log('\n=== 诊断完成 ===');
+}
+
+async function testTTSPlay() {
+  log('\n--- 手动 TTS 播放测试 ---');
+  try {
+    const r = await fetch('/api/soul/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '你好，我是林夏，三年后以总裁身份归来', voice: 'longxiaochun_v2', speech_rate: 0.85, pitch_rate: 0.95 }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.controls = true;
+    document.getElementById('audioContainer').innerHTML = '<p style="color:#4caf50">✅ 音频就绪：</p>';
+    document.getElementById('audioContainer').appendChild(audio);
+    audio.play();
+    log('✅ 播放中，blob=' + blob.size + 'B');
+  } catch (e) {
+    document.getElementById('audioContainer').innerHTML = '<p style="color:#f44336">❌ ' + e.message + '</p>';
+    log('❌ ' + e.name + ': ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

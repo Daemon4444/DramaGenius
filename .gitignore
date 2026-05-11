@@ -1,0 +1,38 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.certs/
+
+# Dependency folders
+node_modules/
+backend/.venv/
+backend/.venv*/
+.venv/
+.venv*/
+
+# Build and generated output
+dist/
+backend/static/
+backend/app/__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Large media and packaged artifacts
+*.mp4
+*.mov
+*.m4v
+*.avi
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.docx
+
+# Local agent/editor metadata bundles from downloaded package
+.*
+!.gitignore
+!.env.example
+
+# OS files
+.DS_Store
