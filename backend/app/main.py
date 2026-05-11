@@ -25,8 +25,8 @@ from app.routers import auth, prophet, soul, arbiter, workspace, producer
 
 settings = get_settings()
 
-# 确保临时音频目录存在
-STATIC_TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "temp")
+# 确保临时音频目录存在（使用本地持久化目录）
+STATIC_TEMP_DIR = os.path.join(settings.LOCAL_DATA_DIR, "temp")
 os.makedirs(STATIC_TEMP_DIR, exist_ok=True)
 
 
@@ -161,9 +161,11 @@ if os.path.isdir(DIST_DIR):
     app.mount("/assets", StaticFiles(directory=_assets_dir), name="frontend_assets")
 
     # 视频文件（支持 Range 请求，视频进度条拖拽必需）
-    # 匹配 /videos/ 和 /drama/ 下的 .mp4 文件
-    _videos_dir = os.path.join(DIST_DIR, "videos")
-    _drama_dir = os.path.join(DIST_DIR, "drama")
+    # 从本地持久化目录提供视频，不进 git
+    _local_videos_dir = os.path.join(settings.LOCAL_DATA_DIR, "videos")
+    os.makedirs(_local_videos_dir, exist_ok=True)
+    _videos_dir = _local_videos_dir
+    _drama_dir = _local_videos_dir
 
     async def _serve_video_file(file_path: str, request: Request):
         """通用视频文件服务 - 使用 FileResponse 原生支持 Range / 异步 IO / ETag"""

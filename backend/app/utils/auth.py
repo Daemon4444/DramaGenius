@@ -111,13 +111,13 @@ async def get_current_user_id(
 async def get_current_user_id_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme)
 ) -> Optional[str]:
-    """可选的用户认证 - 用于允许匿名访问的接口"""
+    """可选的用户认证 - 无 token 时回退到 demo 用户"""
     if credentials is None:
-        return None
+        return "00000000-0000-0000-0000-000000000001"
     try:
         token_data = decode_token(credentials.credentials)
         if token_data.type == "access":
             return token_data.sub
     except HTTPException:
         pass
-    return None
+    return "00000000-0000-0000-0000-000000000001"

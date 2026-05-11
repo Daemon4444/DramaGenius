@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     OSS_PUBLIC_BASE_URL: str = ""  # 可选 CDN/自定义域名，例如 https://media.example.com
     OSS_UPLOAD_PREFIX: str = "dramagenius"
 
+    # ── 本地持久化数据目录（视频/上传/备份，不进 git） ──
+    LOCAL_DATA_DIR: str = "/root/dramagenius-local"
+
     # ── JWT ──
     JWT_SECRET: str = "jwt-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"

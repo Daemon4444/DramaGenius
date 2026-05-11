@@ -8,7 +8,7 @@
  * - 错误处理
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+const API_BASE = typeof __API_BASE__ !== 'undefined' ? __API_BASE__ : '/api';
 
 // ============ Token 管理 ============
 
