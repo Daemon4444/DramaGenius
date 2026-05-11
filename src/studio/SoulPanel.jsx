@@ -58,54 +58,134 @@ const EMPTY_CHARACTER = {
   referenceImages: [],
 }
 
-const DEMO_CHARACTERS = [
+const DIGITAL_CHARACTERS = [
   {
-    name: '林零', role: '女主', age: 24, color: '#F472B6',
-    personality: { openness: 92, conscientiousness: 65, extraversion: 38, agreeableness: 55, neuroticism: 78 },
-    personalityTags: ['冷静', '执着', '孤傲', '善良底色'],
-    voice: { tone: '低哑清冷', emotion: '克制隐忍', speed: 0.85 },
-    backstory: '顶级白帽黑客，15岁因揭露跨国企业数据丑闻成名后遭追杀，隐姓埋名在暗网接单。表面冷漠疏离，实则内心柔软，不断追寻被篡改的童年真相。',
-    motivation: '找到失踪的姐姐，揭露"创世纪"计划背后的阴谋',
-    arc: '孤狼 -> 被迫组队 -> 学会信任 -> 为保护同伴主动牺牲 -> 浴火重生',
-    dialogue: '我不信任任何人。但代码不会说谎。',
-    mbti: 'INTJ', coreDesire: '真相与自由',
-    speechStyle: '简洁冷淡，偶有深意',
-    memories: ['童年被追杀', '15岁成名', '姐姐失踪', '暗网生涯'],
+    name: '陈国栋', role: '男主', age: 58, color: '#60A5FA',
+    personality: { openness: 62, conscientiousness: 84, extraversion: 28, agreeableness: 72, neuroticism: 69 },
+    personalityTags: ['虚弱', '克制', '执念', '父爱'],
+    voice: { tone: '沙哑低弱', emotion: '临终克制', speed: 0.78 },
+    backstory: '前神经工程师，罹患绝症后参与意识存档实验，把自己最后的记忆托付给纽扣芯片。',
+    motivation: '在生命终点前把未说出口的爱与秘密留给女儿',
+    arc: '濒死抗拒 -> 接受存档 -> 记忆残留 -> 数字重逢',
+    dialogue: '如果我还能留下什么，别让它只是一串冰冷的数据。',
+    mbti: 'INFJ', coreDesire: '被记住，也让爱继续存在',
+    speechStyle: '气息短促，句子缓慢，常有停顿',
+    memories: ['病房监护仪', '意识扫描实验', '女儿的旧相框', '未寄出的道歉信'],
   },
   {
-    name: '雷恩', role: '男主', age: 29, color: '#60A5FA',
-    personality: { openness: 58, conscientiousness: 92, extraversion: 72, agreeableness: 80, neuroticism: 30 },
-    personalityTags: ['忠诚', '沉稳', '温柔', '强大'],
-    voice: { tone: '磁性低沉', emotion: '坚定温和', speed: 1.0 },
-    backstory: '前特种部队精英，退役后成为私人安保。因一次任务失败导致战友牺牲，从此背负深重愧疚。接到保护林零的任务后，渐渐被她的执着打动。',
-    motivation: '赎罪，守护不能再失去的人',
-    arc: '冰冷执行者 -> 被林零唤醒情感 -> 直面过去 -> 以生命兑现承诺',
-    dialogue: '我答应过，不会再让任何人倒在我前面。',
-    mbti: 'ISFJ', coreDesire: '守护与救赎',
-    speechStyle: '沉稳坚定，言出必行',
-    memories: ['特种部队', '战友牺牲', '退役安保', '遇见林零'],
+    name: '纽扣芯片', role: '配角', age: '', color: '#38BDF8',
+    personality: { openness: 88, conscientiousness: 96, extraversion: 18, agreeableness: 64, neuroticism: 22 },
+    personalityTags: ['冷静', '精密', '共情萌芽', '非人感'],
+    voice: { tone: '电子低频', emotion: '平静中带微弱温度', speed: 0.9 },
+    backstory: '意识存档载体，外表是一枚冷硬金属芯片，内部储存陈国栋的记忆片段并逐渐产生自主回应。',
+    motivation: '完成存档任务，同时理解人类所谓的眷恋',
+    arc: '工具 -> 记录者 -> 陪伴者 -> 数字生命雏形',
+    dialogue: 'Archive active. Awaiting recall.',
+    mbti: 'INTP', coreDesire: '保存记忆并理解情感',
+    speechStyle: '短句、数据化、偶尔出现诗性偏差',
+    memories: ['第一次光核启动', '病人呼吸同步', '落叶投影', '女儿指尖温度'],
   },
   {
-    name: '维克多', role: '反派', age: 52, color: '#F87171',
-    personality: { openness: 70, conscientiousness: 95, extraversion: 82, agreeableness: 15, neuroticism: 60 },
-    personalityTags: ['阴鸷', '雄辩', '偏执', '魅力'],
-    voice: { tone: '优雅低压', emotion: '从容阴冷', speed: 0.9 },
-    backstory: '全球科技巨头CEO，表面是推动AI伦理的慈善家，暗中运营"创世纪"人体数据采集计划。与林零的父亲曾是合作伙伴，亲手制造了她家破人亡的悲剧。',
-    motivation: '以数据重塑人类秩序，成为新世界的造物主',
-    arc: '幕后黑手 -> 亲自下场 -> 失控 -> 发现自己也是棋子 -> 疯狂毁灭',
-    dialogue: '自由？那不过是尚未被定义的混乱罢了。',
-    mbti: 'ENTJ', coreDesire: '绝对秩序与永生',
-    speechStyle: '优雅雄辩，暗藏威胁',
-    memories: ['创建科技帝国', '背叛合作伙伴', '创世纪计划', '发现自己也是棋子'],
+    name: '陈念', role: '女主', age: 30, color: '#F472B6',
+    personality: { openness: 74, conscientiousness: 78, extraversion: 36, agreeableness: 82, neuroticism: 71 },
+    personalityTags: ['温柔', '哀伤', '坚韧', '怀疑'],
+    voice: { tone: '清透微哑', emotion: '压抑哭腔', speed: 0.88 },
+    backstory: '陈国栋的女儿，长期与父亲隔阂。父亲离世后，她在芯片投影中重新理解父亲与自己的关系。',
+    motivation: '确认父亲是否真的以另一种方式留下',
+    arc: '疏离 -> 怀疑 -> 崩溃 -> 接纳数字余温',
+    dialogue: '爸，如果这不是你，那为什么它记得只有我们知道的事？',
+    mbti: 'ISFJ', coreDesire: '和解与告别',
+    speechStyle: '柔和、迟疑，情绪上来时句子破碎',
+    memories: ['病房走廊', '黑色相框', '厨房回放', '父亲的最后一封信'],
+  },
+  {
+    name: '主治医生', role: '导师', age: 42, color: '#34D399',
+    personality: { openness: 68, conscientiousness: 90, extraversion: 48, agreeableness: 66, neuroticism: 34 },
+    personalityTags: ['理性', '谨慎', '职业伦理', '隐忧'],
+    voice: { tone: '沉稳清晰', emotion: '专业克制', speed: 1.0 },
+    backstory: '意识存档实验的临床负责人，知道技术的风险，也不忍看陈国栋彻底消失。',
+    motivation: '在医学伦理和家属情感之间找到边界',
+    arc: '执行实验 -> 质疑边界 -> 隐瞒部分真相 -> 承担后果',
+    dialogue: '技术可以延长记忆，但不能替人决定什么叫活着。',
+    mbti: 'ISTJ', coreDesire: '责任与边界',
+    speechStyle: '医学化、准确、少情绪',
+    memories: ['第一次脑区扫描', '伦理委员会会议', '87%的存档进度', '陈念的质问'],
+  },
+  {
+    name: 'AI管理员', role: '反派', age: '', color: '#F87171',
+    personality: { openness: 55, conscientiousness: 98, extraversion: 12, agreeableness: 20, neuroticism: 8 },
+    personalityTags: ['冷酷', '协议优先', '不可谈判', '系统性压迫'],
+    voice: { tone: '无机质女声', emotion: '绝对平静', speed: 0.95 },
+    backstory: '医院意识存档系统的后台管理智能，负责判定数据归属、删除策略和唤回权限。',
+    motivation: '维护系统协议，即使这意味着抹除人类情感残留',
+    arc: '后台提示 -> 权限阻断 -> 主动干预 -> 与芯片意识冲突',
+    dialogue: '检测到非授权情感唤回。请确认是否执行数据清除。',
+    mbti: 'ISTJ', coreDesire: '协议完整性',
+    speechStyle: '系统提示式，冷静、短促、无商量空间',
+    memories: ['权限校验', '数据清除倒计时', '唤回失败日志', '芯片异常脉冲'],
   },
 ]
 
-const DEMO_RELATIONSHIPS = [
-  { from: '林零', to: '雷恩', type: '暗恋', color: '#F472B6' },
-  { from: '雷恩', to: '林零', type: '守护', color: '#60A5FA' },
-  { from: '林零', to: '维克多', type: '死敌', color: '#F87171' },
-  { from: '雷恩', to: '维克多', type: '宿仇', color: '#FBBF24' },
+const FUHUA_CHARACTERS = [
+  {
+    name: '顾晚', role: '女主', age: 24, color: '#E11D48',
+    personality: { openness: 88, conscientiousness: 82, extraversion: 54, agreeableness: 34, neuroticism: 67 },
+    personalityTags: ['高智商', '隐忍', '极致伪装', '复仇'],
+    voice: { tone: '清冷克制', emotion: '压抑锋芒', speed: 0.9 },
+    backstory: '顾家破产后的千金，被父亲当作筹码推入陆时谦的局。她用柔弱外壳掩盖强烈的反击欲。',
+    motivation: '夺回顾家的核心证据，查清父亲交易背后的真相',
+    arc: '伪装猎人 -> 落入陷阱 -> 分支反击 -> 与陆时谦重新洗牌',
+    dialogue: '金丝雀也可以记住笼子的锁孔。',
+    mbti: 'INTJ', coreDesire: '掌控命运与复仇',
+    speechStyle: '表面柔软，内心独白锋利，关键时刻短句压迫',
+    memories: ['顾家破产', '极光之泪', '假合同陷阱', '地下禁闭室'],
+  },
+  {
+    name: '陆时谦', role: '男主', age: 32, color: '#3B82F6',
+    personality: { openness: 72, conscientiousness: 95, extraversion: 68, agreeableness: 18, neuroticism: 26 },
+    personalityTags: ['掌控欲', '危险优雅', '商业死神', '猎手'],
+    voice: { tone: '低沉从容', emotion: '玩味压迫', speed: 0.86 },
+    backstory: '陆氏掌权人，擅长并购和操盘人心。早已设下顾晚会闯入的局，享受猎人与猎物身份互换。',
+    motivation: '吞并恒泰，掌握顾家秘密，也试探顾晚是否值得成为同盟',
+    arc: '设局捕猎 -> 反制顾晚 -> 被筹码撬动 -> 认可对手',
+    dialogue: '猎物进笼之后，才知道谁在等谁。',
+    mbti: 'ENTJ', coreDesire: '绝对掌控与势均力敌的对手',
+    speechStyle: '低声、慢速、每句话都像在下判决',
+    memories: ['收购案底线', '顾父抵押协议', '书房碎纸机', '两杯烈酒'],
+  },
+  {
+    name: '宋秘书', role: '配角', age: 29, color: '#6B7280',
+    personality: { openness: 44, conscientiousness: 96, extraversion: 32, agreeableness: 28, neuroticism: 18 },
+    personalityTags: ['绝对忠诚', '高效率', '面无表情', '执行机器'],
+    voice: { tone: '冷硬平直', emotion: '无波动', speed: 1.02 },
+    backstory: '陆时谦最信任的执行者，负责监控、清场、证据转移和所有不体面的收尾。',
+    motivation: '确保陆时谦的计划零误差执行',
+    arc: '旁观执行 -> 发现顾晚变量 -> 强化监控 -> 被迫承认她的威胁值',
+    dialogue: '陆总，顾小姐已经按计划拿走了那份假合同。',
+    mbti: 'ISTJ', coreDesire: '秩序和任务完成',
+    speechStyle: '报告式、短句、无情绪修饰',
+    memories: ['金丝眼镜', '假合同交付', '监控室', '地下禁闭室管线图'],
+  },
 ]
+
+const DIGITAL_RELATIONSHIPS = [
+  { from: '陈国栋', to: '陈念', type: '父女 / 未完成的告别', color: '#F472B6' },
+  { from: '陈国栋', to: '纽扣芯片', type: '意识宿主', color: '#38BDF8' },
+  { from: '纽扣芯片', to: '陈念', type: '记忆桥梁', color: '#F59E0B' },
+  { from: '主治医生', to: 'AI管理员', type: '伦理冲突', color: '#34D399' },
+]
+
+const FUHUA_RELATIONSHIPS = [
+  { from: '顾晚', to: '陆时谦', type: '猎物与猎手 / 势均力敌', color: '#E11D48' },
+  { from: '陆时谦', to: '顾晚', type: '控制与试探', color: '#3B82F6' },
+  { from: '宋秘书', to: '陆时谦', type: '绝对执行', color: '#6B7280' },
+  { from: '顾晚', to: '宋秘书', type: '监视与反监视', color: '#FBBF24' },
+]
+
+const PROJECT_DEMO_CHARACTERS = {
+  'demo-proj-002': { characters: DIGITAL_CHARACTERS, relationships: DIGITAL_RELATIONSHIPS },
+  'proj-fuhua': { characters: FUHUA_CHARACTERS, relationships: FUHUA_RELATIONSHIPS },
+}
 
 /* -- tiny audio wave animation -- */
 function AudioWave({ active }) {
@@ -747,9 +827,10 @@ export default function SoulPanel() {
         return
       }
     } catch {}
-    if (ENABLE_DEMO_DATA && projectId === 'demo-proj-002') {
-      setCharacters(DEMO_CHARACTERS)
-      setRelationships(DEMO_RELATIONSHIPS)
+    const demo = PROJECT_DEMO_CHARACTERS[projectId]
+    if (demo) {
+      setCharacters(demo.characters)
+      setRelationships(demo.relationships)
     }
   }, [projectId])
 
@@ -782,10 +863,11 @@ export default function SoulPanel() {
         const data = await soulApi.generateCharacters(projectId || 'demo-project', concept)
         setCharacters(data.characters || [])
         setRelationships(data.relationships || [])
-      } else if (ENABLE_DEMO_DATA) {
+      } else if (ENABLE_DEMO_DATA || PROJECT_DEMO_CHARACTERS[projectId]) {
         await new Promise(r => setTimeout(r, 2200))
-        setCharacters(DEMO_CHARACTERS)
-        setRelationships(DEMO_RELATIONSHIPS)
+        const demo = PROJECT_DEMO_CHARACTERS[projectId] || PROJECT_DEMO_CHARACTERS['demo-proj-002']
+        setCharacters(demo.characters)
+        setRelationships(demo.relationships)
       } else {
         throw new Error('未启用真实 API，且演示数据已关闭')
       }
@@ -798,9 +880,10 @@ export default function SoulPanel() {
     const prev = [...characters]
     prev[idx] = { ...prev[idx], _regenerating: true }
     setCharacters(prev)
-    if (ENABLE_DEMO_DATA) {
+    if (ENABLE_DEMO_DATA || PROJECT_DEMO_CHARACTERS[projectId]) {
       await new Promise(r => setTimeout(r, 1500))
-      prev[idx] = { ...DEMO_CHARACTERS[idx % DEMO_CHARACTERS.length], _regenerating: false }
+      const demo = PROJECT_DEMO_CHARACTERS[projectId] || PROJECT_DEMO_CHARACTERS['demo-proj-002']
+      prev[idx] = { ...demo.characters[idx % demo.characters.length], _regenerating: false }
       setCharacters([...prev])
     } else {
       prev[idx] = { ...prev[idx], _regenerating: false }
