@@ -18,7 +18,7 @@ AI-native interactive short drama studio. DaraGenius combines trend analysis, ch
 - Studio project list with create/delete support
 - Project overview with pipeline, metrics, recent activity, and export menu
 - Prophet topic analysis with hot keywords, platform stats, and Qwen-powered trend analysis
-- Soul character engine with character generation, dialogue generation, TTS, voice preview, OSS/public-host voice cloning, and R2V character reference images
+- Soul character engine with character generation, dialogue generation, TTS, voice preview, OSS/public-host voice cloning, and R2V character image/video references
 - Arbiter decision engine with scenario generation, decision design, and streaming branch simulation
 - Script workspace with episode list, AI generation, AI continuation, and copy workflow
 - Producer workspace with DB-backed hotspots, scripts, audience vote/comment APIs, production progress SSE, HappyHorse/WAN text-to-video, and HappyHorse R2V reference-to-video task submission
@@ -132,6 +132,7 @@ HAPPYHORSE_T2V_MODEL=happyhorse-1.0-t2v
 HAPPYHORSE_I2V_MODEL=happyhorse-1.0-i2v
 HAPPYHORSE_R2V_MODEL=happyhorse-1.0-r2v
 HAPPYHORSE_EDIT_MODEL=happyhorse-1.0-video-edit
+WAN_R2V_MODEL=wan2.6-r2v-flash
 
 OSS_ACCESS_KEY_ID=
 OSS_ACCESS_KEY_SECRET=
@@ -224,7 +225,7 @@ Important workflow endpoints:
 - `POST /api/workspace/continue` streams script continuation
 - `POST /api/workspace/export` creates `json`, `fountain`, `docx`, or `pdf`
 - `POST /api/soul/tts` returns MP3 audio
-- `POST /api/producer/references/upload` uploads a character/reference image and returns a DashScope-reachable public URL
+- `POST /api/producer/references/upload` uploads a character/reference image or video and returns a DashScope-reachable public URL
 - `POST /api/producer/video/generate` submits HappyHorse/WAN video generation tasks
 - `GET /api/producer/video/status/{task_id}` checks video task status
 - `GET /api/producer/produce/progress/{task_id}` streams real DashScope task polling results
@@ -237,22 +238,25 @@ The main production flow is:
 Project
   -> Prophet topic direction
   -> Soul character profiles
-  -> character reference images
+  -> character reference images / videos
   -> Script scenes
   -> Producer shots
-  -> HappyHorse R2V video tasks
+  -> HappyHorse R2V or Wan R2V video tasks
   -> cached final MP4 URLs
 ```
 
-The purpose of the R2V path is character consistency. A user can upload or paste public image URLs for each character in the Soul panel. The Producer panel reads those saved references for the same `project_id`, switches the shot model to `happyhorse-1.0-r2v`, and sends the reference images together with the shot prompt.
+The purpose of the R2V path is character consistency. A user can upload or paste public image/video URLs for each character in the Soul panel. The Producer panel reads those saved references for the same `project_id` and sends them with the shot prompt.
+
+- Image-only references can use `happyhorse-1.0-r2v`.
+- Any video reference switches the shot to `wan2.6-r2v-flash`, which accepts image and video URLs through `input.reference_urls`.
 
 The verified main path is:
 
 1. Create or open a project.
 2. Add characters in Soul.
-3. Upload or paste character reference images. The backend stores uploads in OSS through `POST /api/producer/references/upload`.
+3. Upload or paste character reference images/videos. The backend stores uploads in OSS through `POST /api/producer/references/upload`.
 4. Import or write script scenes in Producer.
-5. Generate a shot with `happyhorse-1.0-r2v`.
+5. Generate a shot with `happyhorse-1.0-r2v` for images or `wan2.6-r2v-flash` when reference videos are present.
 6. Poll `GET /api/producer/video/status/{task_id}` until `SUCCEEDED`.
 7. The backend caches the final MP4 and returns `/api/producer/videos/<task_id>.mp4`.
 
@@ -302,6 +306,28 @@ When `reference_image_urls` is not empty, the backend forces the model to `HAPPY
 }
 ```
 
+When `reference_video_urls` is not empty, the backend forces the model to `WAN_R2V_MODEL` and submits a Wan R2V payload shape:
+
+```json
+{
+  "model": "wan2.6-r2v-flash",
+  "input": {
+    "prompt": "...",
+    "reference_urls": [
+      "https://.../character-motion.mp4",
+      "https://.../character.png"
+    ]
+  },
+  "parameters": {
+    "size": "720*1280",
+    "duration": 5,
+    "shot_type": "multi",
+    "audio": false,
+    "watermark": false
+  }
+}
+```
+
 After DashScope returns `SUCCEEDED`, `GET /api/producer/video/status/{task_id}` downloads the remote result and returns a local stable URL:
 
 ```json
@@ -313,7 +339,7 @@ After DashScope returns `SUCCEEDED`, `GET /api/producer/video/status/{task_id}` 
 }
 ```
 
-## R2V Reference Image Upload Contract
+## R2V Reference Asset Upload Contract
 
 Endpoint:
 
@@ -321,19 +347,25 @@ Endpoint:
 POST /api/producer/references/upload
 Content-Type: multipart/form-data
 field: image
+# or
+field: asset
 ```
 
-Supported image types:
+Supported asset types:
 
 - JPEG / JPG
 - PNG
 - WEBP
 - BMP
+- MP4
+- MOV
 
 Limits:
 
-- Maximum file size: 10 MB
+- Maximum image file size: 10 MB
+- Maximum video file size: 100 MB
 - Required shortest side for HappyHorse R2V: at least 400 px
+- Wan R2V reference videos must be no longer than 30 seconds.
 - File content must be a valid image matching the declared type; a non-image binary uploaded as `.png` will be rejected by DashScope.
 - Returned URL must be reachable by DashScope from the public internet
 
@@ -343,7 +375,8 @@ Success response:
 {
   "url": "https://your-cdn.example.com/dramagenius/r2v-references/2026/05/11/xxx.png",
   "content_type": "image/png",
-  "filename": "heroine.png"
+  "filename": "heroine.png",
+  "media_type": "image"
 }
 ```
 
@@ -353,7 +386,7 @@ Server-side implementation notes:
 - Configure `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_BUCKET_NAME`, `OSS_ENDPOINT`, and `OSS_PUBLIC_BASE_URL`.
 - If OSS is not used, `PUBLIC_HOST` must point to a public backend/static host accessible by DashScope.
 - Local `127.0.0.1`, `localhost`, private LAN IPs, or unsigned internal object URLs will not work for R2V.
-- The frontend also accepts a manually pasted public image URL, so the server can implement separate asset management later without changing the Producer API.
+- The frontend also accepts manually pasted public image/video URLs, so the server can implement separate asset management later without changing the Producer API.
 
 ## Export Files
 
@@ -376,7 +409,7 @@ The API returns a relative `download_url`, for example:
 
 ## Voice Clone Note
 
-Voice clone and R2V reference images require DashScope to fetch uploaded media from public URLs. Configure OSS for production:
+Voice clone and R2V reference images/videos require DashScope to fetch uploaded media from public URLs. Configure OSS for production:
 
 ```bash
 OSS_ACCESS_KEY_ID=...
@@ -420,6 +453,7 @@ Verified:
 - Demo MP4 assets exist for both projects and are non-empty.
 - OSS upload path was verified against an Alibaba Cloud OSS bucket.
 - HappyHorse R2V was verified end-to-end with a public OSS reference image URL. The task reached `SUCCEEDED`, and the backend cached the returned video as a local MP4.
+- Wan R2V was verified end-to-end with a public OSS reference image plus public OSS reference video. The task reached `SUCCEEDED`, and the backend cached the returned video as a local MP4.
 - Strict API checks proving `DEV_SKIP_DB=true` plus `ALLOW_DEMO_DATA=false` blocks fake login, in-memory projects, no-project Producer data, no-interaction votes, and demo voice preview.
 - `/ready` reports missing Redis/Elasticsearch when services are not running instead of pretending readiness.
 
@@ -427,6 +461,7 @@ R2V validation notes from testing:
 
 - Public OSS URL returned `200 OK`.
 - Reference image must be at least `400x400`.
+- Reference video must be at most `30s`.
 - Invalid image bytes with a `.png` filename are rejected by DashScope.
 - Successful local test task produced `/api/producer/videos/<task_id>.mp4`.
 
@@ -441,7 +476,7 @@ For a full non-demo deployment, configure and verify:
 - Elasticsearch
 - DashScope/Bailian API key
 - Public file hosting for voice clone reference audio
-- OSS storage or a DashScope-reachable `PUBLIC_HOST` for voice clone audio and R2V character images
+- OSS storage or a DashScope-reachable `PUBLIC_HOST` for voice clone audio and R2V character images/videos
 - Real crawler data in Elasticsearch
 
 ## Useful Commands

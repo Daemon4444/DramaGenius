@@ -252,6 +252,20 @@ export const soulApi = {
     return res.json();
   },
 
+  async uploadReferenceAsset(file) {
+    const formData = new FormData();
+    formData.append('asset', file);
+    const res = await fetch(`${API_BASE}/producer/references/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: '参考资产上传失败' }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   async getCharacter(characterId) {
     return api.get(`/soul/characters/${characterId}`);
   },

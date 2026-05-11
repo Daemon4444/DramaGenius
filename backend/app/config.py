@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     HAPPYHORSE_I2V_MODEL: str = "happyhorse-1.0-i2v"
     HAPPYHORSE_R2V_MODEL: str = "happyhorse-1.0-r2v"
     HAPPYHORSE_EDIT_MODEL: str = "happyhorse-1.0-video-edit"
+    WAN_R2V_MODEL: str = "wan2.6-r2v-flash"
 
     # ── CosyVoice (语音合成) ──
     COSYVOICE_API_KEY: str = ""

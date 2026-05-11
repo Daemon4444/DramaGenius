@@ -10,6 +10,7 @@ const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const MODELS = [
   { id: 'happyhorse-1.0-r2v', label: 'HappyHorse R2V', desc: '角色参考图 · 形象一致', badge: '人' },
+  { id: 'wan2.6-r2v-flash', label: 'Wan R2V', desc: '图片/视频参考 · 主体延续', badge: '参' },
   { id: 'happyhorse-1.0-t2v', label: 'HappyHorse 1.0', desc: '720P/1080P · 有声叙事', badge: '声' },
   { id: 'wanx2.1-t2v-turbo',  label: 'One Turbo',       desc: 'Wanx 2.1 · 快速预览',   badge: '快' },
   { id: 'wanx2.1-t2v-plus',   label: 'One Plus',        desc: 'Wanx 2.1 · 高质量',     badge: '精' },
@@ -261,6 +262,7 @@ export default function ProducerPanel() {
   const [importing, setImporting] = useState(false)
   const [panelNotice, setPanelNotice] = useState('')
   const [referenceImages, setReferenceImages] = useState([])
+  const [referenceVideos, setReferenceVideos] = useState([])
   const pollTimers = useRef({})
   const shotsRef = useRef(shots)
 
@@ -292,9 +294,14 @@ export default function ProducerPanel() {
       const refs = (Array.isArray(chars) ? chars : [])
         .flatMap(c => c.referenceImages || (c.referenceImageUrl ? [c.referenceImageUrl] : []))
         .filter(Boolean)
+      const videoRefs = (Array.isArray(chars) ? chars : [])
+        .flatMap(c => c.referenceVideos || (c.referenceVideoUrl ? [c.referenceVideoUrl] : []))
+        .filter(Boolean)
       setReferenceImages([...new Set(refs)].slice(0, 9))
+      setReferenceVideos([...new Set(videoRefs)].slice(0, 3))
     } catch {
       setReferenceImages([])
+      setReferenceVideos([])
     }
   }, [projectId])
 
@@ -322,10 +329,11 @@ export default function ProducerPanel() {
   }
 
   const enableR2V = () => {
-    applyGlobalModel('happyhorse-1.0-r2v')
-    setPanelNotice(referenceImages.length
-      ? `已启用 R2V：将使用 ${referenceImages.length} 张角色参考图，提示词中可用 character1、character2 指代。`
-      : '请先在「角色」步骤上传人物参考图，或粘贴公网图片 URL。')
+    const model = referenceVideos.length ? 'wan2.6-r2v-flash' : 'happyhorse-1.0-r2v'
+    applyGlobalModel(model)
+    setPanelNotice(referenceImages.length || referenceVideos.length
+      ? `已启用 R2V：将使用 ${referenceImages.length} 张参考图、${referenceVideos.length} 段参考视频。图片提示词可用 character1、character2 指代；参考视频会走 Wan R2V。`
+      : '请先在「角色」步骤上传人物参考图/视频，或粘贴公网 URL。')
   }
 
   const applyGlobalSize = (size) => {
@@ -433,8 +441,14 @@ export default function ProducerPanel() {
     // read from ref to avoid stale closure
     const shot = shotsRef.current.find(s => s.id === shotId)
     if (!shot || !shot.prompt.trim()) return
-    if (shot.model === 'happyhorse-1.0-r2v' && referenceImages.length === 0) {
-      updateShot(shotId, { status: 'error', error: 'R2V 需要至少 1 张人物参考图', progress: 0 })
+    const isHappyR2V = shot.model === 'happyhorse-1.0-r2v'
+    const isWanR2V = shot.model === 'wan2.6-r2v-flash'
+    if (isHappyR2V && referenceImages.length === 0) {
+      updateShot(shotId, { status: 'error', error: 'HappyHorse R2V 需要至少 1 张人物参考图', progress: 0 })
+      return
+    }
+    if (isWanR2V && referenceImages.length === 0 && referenceVideos.length === 0) {
+      updateShot(shotId, { status: 'error', error: 'Wan R2V 需要至少 1 个参考图片或参考视频', progress: 0 })
       return
     }
 
@@ -449,7 +463,8 @@ export default function ProducerPanel() {
         model: shot.model,
         size: shot.size,
         duration: shot.duration,
-        reference_image_urls: shot.model === 'happyhorse-1.0-r2v' ? referenceImages : [],
+        reference_image_urls: (isHappyR2V || isWanR2V) ? referenceImages : [],
+        reference_video_urls: isWanR2V ? referenceVideos : [],
       })
       if (!data) throw new Error('请求失败')
       updateShot(shotId, { status: 'pending', taskId: data.task_id, progress: 5 })
@@ -457,7 +472,7 @@ export default function ProducerPanel() {
     } catch (err) {
       updateShot(shotId, { status: 'error', error: err.message, progress: 0 })
     }
-  }, [projectId, referenceImages, updateShot])
+  }, [projectId, referenceImages, referenceVideos, updateShot])
 
   /* ─── API: poll (uses ref to avoid stale closure bug) ─────────────── */
 
@@ -524,7 +539,7 @@ export default function ProducerPanel() {
   const completedVideos = shots.filter(s => s.status === 'done' && s.videoUrl).map(s => s.videoUrl)
   const hasAnyPrompt = shots.some(s => s.prompt.trim())
   const activeModel = useMemo(() => MODELS.find(m => m.id === globalModel) || MODELS[0], [globalModel])
-  const r2vActive = globalModel === 'happyhorse-1.0-r2v'
+  const r2vActive = globalModel === 'happyhorse-1.0-r2v' || globalModel === 'wan2.6-r2v-flash'
 
   /* ─── Aspect ratio helper ─────────────────────────────────────────── */
 
@@ -669,7 +684,7 @@ export default function ProducerPanel() {
               : 'border-white/[0.08] bg-white/[0.03] text-white/45 hover:text-cyan-100 hover:border-cyan-300/25'
           }`}
         >
-          R2V 角色参考 · {referenceImages.length} 张
+          R2V 角色参考 · {referenceImages.length} 图 / {referenceVideos.length} 视频
         </button>
 
         {/* Import from script */}
@@ -691,23 +706,23 @@ export default function ProducerPanel() {
         </button>
       </div>
 
-      {(r2vActive || referenceImages.length > 0) && (
+      {(r2vActive || referenceImages.length > 0 || referenceVideos.length > 0) && (
         <div className="mb-5 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.045] p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
-              <div className="text-xs font-medium text-cyan-100/80">HappyHorse R2V 角色一致性</div>
+              <div className="text-xs font-medium text-cyan-100/80">R2V 角色一致性参考</div>
               <div className="text-[10px] text-white/32 mt-1">
-                生成时会把参考图按顺序传给 DashScope：第 1 张对应 character1，第 2 张对应 character2。提示词里写 character1/character2 可锁定人物。
+                图片参考会传给 HappyHorse/Wan R2V；视频参考会自动使用 Wan R2V。第 1 张图片对应 character1，第 2 张对应 character2。
               </div>
             </div>
             <button
-              onClick={() => setReferenceImages([])}
+              onClick={() => { setReferenceImages([]); setReferenceVideos([]) }}
               className="text-[10px] text-white/25 hover:text-white/55"
             >
               清空
             </button>
           </div>
-          {referenceImages.length > 0 ? (
+          {referenceImages.length > 0 || referenceVideos.length > 0 ? (
             <div className="flex gap-2 overflow-x-auto">
               {referenceImages.map((url, idx) => (
                 <div key={`${url}-${idx}`} className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/[0.08] bg-black/20">
@@ -715,10 +730,16 @@ export default function ProducerPanel() {
                   <span className="absolute left-1 top-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] text-cyan-100">character{idx + 1}</span>
                 </div>
               ))}
+              {referenceVideos.map((url, idx) => (
+                <div key={`${url}-${idx}`} className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-white/[0.08] bg-black/20">
+                  <video src={url} className="h-full w-full object-cover" muted playsInline />
+                  <span className="absolute left-1 top-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] text-violet-100">video{idx + 1}</span>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-xs text-amber-100/70">
-              暂无参考图。请在「角色」步骤为人物上传参考图，或粘贴公网图片 URL。
+              暂无参考资产。请在「角色」步骤为人物上传参考图/视频，或粘贴公网 URL。
             </div>
           )}
         </div>

@@ -56,6 +56,7 @@ const EMPTY_CHARACTER = {
   speechStyle: '',
   memories: [],
   referenceImages: [],
+  referenceVideos: [],
 }
 
 const DIGITAL_CHARACTERS = [
@@ -247,6 +248,7 @@ function TagInput({ tags, onChange, placeholder }) {
 function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
+  const videoInputRef = useRef(null)
   const [activeSection, setActiveSection] = useState('basic')
   const [uploadingRef, setUploadingRef] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -292,6 +294,8 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
         if (data.memories) merged.memories = data.memories
         if (data.referenceImages) merged.referenceImages = data.referenceImages
         if (data.referenceImageUrl) merged.referenceImages = [data.referenceImageUrl]
+        if (data.referenceVideos) merged.referenceVideos = data.referenceVideos
+        if (data.referenceVideoUrl) merged.referenceVideos = [data.referenceVideoUrl]
         onChange(merged)
       } catch {
         alert('JSON 格式错误，请检查文件内容')
@@ -307,13 +311,32 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
     setUploadingRef(true)
     setUploadError('')
     try {
-      const result = await soulApi.uploadReferenceImage(file)
+      const result = await soulApi.uploadReferenceAsset(file)
       onChange({
         ...character,
         referenceImages: [...(character.referenceImages || []), result.url],
       })
     } catch (err) {
       setUploadError(err.message || '参考图上传失败')
+    } finally {
+      setUploadingRef(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleReferenceVideoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingRef(true)
+    setUploadError('')
+    try {
+      const result = await soulApi.uploadReferenceAsset(file)
+      onChange({
+        ...character,
+        referenceVideos: [...(character.referenceVideos || []), result.url],
+      })
+    } catch (err) {
+      setUploadError(err.message || '参考视频上传失败')
     } finally {
       setUploadingRef(false)
       e.target.value = ''
@@ -441,18 +464,29 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
             <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
-                  <label className="block text-[10px] text-cyan-100/60 mb-1">R2V 人物参考图</label>
-                  <p className="text-[9px] text-white/28">用于制片阶段 HappyHorse R2V 保持角色形象一致。图片必须能被 DashScope 公网访问。</p>
+                  <label className="block text-[10px] text-cyan-100/60 mb-1">R2V 人物参考图 / 视频</label>
+                  <p className="text-[9px] text-white/28">图片用于 HappyHorse R2V；参考视频会在制片阶段走 Wan R2V。文件必须能被 DashScope 公网访问。</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={uploadingRef}
-                  className="px-3 py-2 rounded-lg bg-cyan-300/10 border border-cyan-300/20 text-[11px] text-cyan-100/70 hover:bg-cyan-300/15 disabled:opacity-45 transition-all"
-                >
-                  {uploadingRef ? '上传中...' : '上传参考图'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={uploadingRef}
+                    className="px-3 py-2 rounded-lg bg-cyan-300/10 border border-cyan-300/20 text-[11px] text-cyan-100/70 hover:bg-cyan-300/15 disabled:opacity-45 transition-all"
+                  >
+                    {uploadingRef ? '上传中...' : '上传图片'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={uploadingRef}
+                    className="px-3 py-2 rounded-lg bg-violet-300/10 border border-violet-300/20 text-[11px] text-violet-100/70 hover:bg-violet-300/15 disabled:opacity-45 transition-all"
+                  >
+                    上传视频
+                  </button>
+                </div>
                 <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/bmp" className="hidden" onChange={handleReferenceUpload} />
+                <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime" className="hidden" onChange={handleReferenceVideoUpload} />
               </div>
               {uploadError && <p className="mb-2 text-[10px] text-red-300">{uploadError}</p>}
               <input
@@ -467,6 +501,23 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
                   {(character.referenceImages || []).slice(0, 4).map((url, i) => (
                     <div key={`${url}-${i}`} className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
                       <img src={url} alt={`${character.name || '角色'}参考图${i + 1}`} className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                type="url"
+                value={(character.referenceVideos || [])[0] || ''}
+                onChange={e => update('referenceVideos', e.target.value ? [e.target.value] : [])}
+                placeholder="可选：粘贴角色参考视频 URL，例如 https://.../character.mp4"
+                className="mt-3 w-full px-3 py-2.5 rounded-lg bg-black/20 border border-white/[0.08] text-xs text-white/75 placeholder-white/20 focus:border-violet-300/35 focus:outline-none transition-colors"
+              />
+              {(character.referenceVideos || []).length > 0 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto">
+                  {(character.referenceVideos || []).slice(0, 3).map((url, i) => (
+                    <div key={`${url}-${i}`} className="relative h-14 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+                      <video src={url} className="h-full w-full object-cover" muted playsInline />
+                      <span className="absolute left-1 top-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] text-violet-100">video{i + 1}</span>
                     </div>
                   ))}
                 </div>

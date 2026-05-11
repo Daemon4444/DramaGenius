@@ -941,6 +941,7 @@ class VideoGenerateRequest(BaseModel):
     seed: Optional[int] = None
     prompt_extend: bool = True
     reference_image_urls: List[str] = []
+    reference_video_urls: List[str] = []
 
 
 @router.post("/video/generate")
@@ -957,9 +958,14 @@ async def video_generate(req: VideoGenerateRequest):
             prompt_extend=req.prompt_extend,
             seed=req.seed,
             reference_image_urls=req.reference_image_urls,
+            reference_video_urls=req.reference_video_urls,
         )
         result["model"] = video_service.normalize_model(req.model)
-        if req.reference_image_urls:
+        if req.reference_video_urls:
+            result["model"] = settings.WAN_R2V_MODEL
+            result["reference_video_count"] = len(req.reference_video_urls)
+            result["reference_image_count"] = len(req.reference_image_urls)
+        elif req.reference_image_urls:
             result["model"] = settings.HAPPYHORSE_R2V_MODEL
             result["reference_image_count"] = len(req.reference_image_urls)
         result["project_id"] = req.project_id
@@ -1010,33 +1016,44 @@ async def video_status(task_id: str):
 
 @router.post("/references/upload")
 async def upload_reference_image(
-    image: UploadFile = File(..., description="人物/道具参考图，供 HappyHorse R2V 使用")
+    image: UploadFile | None = File(None, description="人物/道具参考图，供 HappyHorse/Wan R2V 使用"),
+    asset: UploadFile | None = File(None, description="人物参考图片或视频，供 R2V 使用")
 ):
-    """上传 R2V 参考图，返回 DashScope 可访问的公网 URL。"""
-    content_type = (image.content_type or "").lower()
-    allowed = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/bmp"}
-    if content_type not in allowed:
-        raise HTTPException(status_code=400, detail="参考图只支持 JPG/PNG/WEBP/BMP")
+    """上传 R2V 参考图片/视频，返回 DashScope 可访问的公网 URL。"""
+    upload = asset or image
+    if not upload:
+        raise HTTPException(status_code=400, detail="请上传参考图片或视频")
 
-    data = await image.read()
+    content_type = (upload.content_type or "").lower()
+    image_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/bmp"}
+    video_types = {"video/mp4", "video/quicktime", "video/mov"}
+    is_image = content_type in image_types
+    is_video = content_type in video_types
+    if not (is_image or is_video):
+        raise HTTPException(status_code=400, detail="参考资产只支持 JPG/PNG/WEBP/BMP 图片或 MP4/MOV 视频")
+
+    data = await upload.read()
     if len(data) < 1024:
-        raise HTTPException(status_code=400, detail="参考图文件过小")
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="参考图不能超过 10MB")
+        raise HTTPException(status_code=400, detail="参考资产文件过小")
+    max_size = 100 * 1024 * 1024 if is_video else 10 * 1024 * 1024
+    if len(data) > max_size:
+        raise HTTPException(status_code=400, detail="参考视频不能超过 100MB" if is_video else "参考图不能超过 10MB")
 
-    filename = image.filename or f"reference-{uuid4().hex}.jpg"
+    filename = upload.filename or f"reference-{uuid4().hex}.{'mp4' if is_video else 'jpg'}"
+    media_type = "video" if is_video else "image"
+    prefix = "r2v-reference-videos" if is_video else "r2v-references"
     try:
         url = await storage_service.upload_bytes(
             data,
             filename=filename,
-            content_type=image.content_type,
-            prefix="r2v-references",
+            content_type=upload.content_type,
+            prefix=prefix,
         )
     except StorageNotConfigured:
         if not settings.PUBLIC_HOST:
             raise HTTPException(
                 status_code=503,
-                detail="R2V 参考图需要 OSS 或 PUBLIC_HOST，DashScope 必须能访问公网图片 URL"
+                detail="R2V 参考资产需要 OSS 或 PUBLIC_HOST，DashScope 必须能访问公网 URL"
             )
         ref_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "references")
         os.makedirs(ref_dir, exist_ok=True)
@@ -1047,4 +1064,4 @@ async def upload_reference_image(
             f.write(data)
         url = f"{settings.PUBLIC_HOST.rstrip('/')}/static/temp/references/{local_name}"
 
-    return {"url": url, "content_type": image.content_type, "filename": filename}
+    return {"url": url, "content_type": upload.content_type, "filename": filename, "media_type": media_type}

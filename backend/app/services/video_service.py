@@ -45,6 +45,7 @@ class VideoService:
         prompt_extend: bool = True,
         seed: int | None = None,
         reference_image_urls: list[str] | None = None,
+        reference_video_urls: list[str] | None = None,
     ) -> dict:
         """
         提交视频生成任务（异步）
@@ -54,12 +55,15 @@ class VideoService:
             raise ValueError("DASHSCOPE_API_KEY 未设置")
 
         reference_image_urls = [u for u in (reference_image_urls or []) if u]
+        reference_video_urls = [u for u in (reference_video_urls or []) if u]
         model = self.normalize_model(model or settings.VIDEO_MODEL_DEFAULT)
-        if reference_image_urls:
+        if reference_video_urls:
+            model = settings.WAN_R2V_MODEL
+        elif reference_image_urls:
             model = settings.HAPPYHORSE_R2V_MODEL
 
         VS = _get_video_synthesis()
-        if not VS or model.startswith(("happyhorse-", "wanx")):
+        if reference_video_urls or not VS or model.startswith(("happyhorse-", "wanx", "wan2.")):
             return await self._submit_task_http(
                 prompt=prompt,
                 model=model,
@@ -69,6 +73,7 @@ class VideoService:
                 prompt_extend=prompt_extend,
                 seed=seed,
                 reference_image_urls=reference_image_urls,
+                reference_video_urls=reference_video_urls,
             )
 
         loop = asyncio.get_event_loop()
@@ -140,15 +145,21 @@ class VideoService:
         prompt_extend: bool = True,
         seed: int | None = None,
         reference_image_urls: list[str] | None = None,
+        reference_video_urls: list[str] | None = None,
     ) -> dict:
         """DashScope HTTP async task API fallback for SDK versions without VideoSynthesis."""
         reference_image_urls = [u for u in (reference_image_urls or []) if u]
+        reference_video_urls = [u for u in (reference_video_urls or []) if u]
         model = self.normalize_model(model)
-        if reference_image_urls:
+        if reference_video_urls:
+            model = settings.WAN_R2V_MODEL
+        elif reference_image_urls:
             model = settings.HAPPYHORSE_R2V_MODEL
         resolution, ratio = self._normalize_video_size(size)
         parameters = {"watermark": False}
-        if model.startswith("happyhorse-"):
+        if model == settings.WAN_R2V_MODEL or (model.endswith("-r2v") and not model.startswith("happyhorse-")):
+            parameters.update({"size": size, "duration": duration, "shot_type": "multi", "audio": False})
+        elif model.startswith("happyhorse-"):
             parameters.update({"duration": duration, "resolution": resolution, "ratio": ratio})
         else:
             parameters.update({"size": size, "prompt_extend": prompt_extend})
@@ -158,7 +169,10 @@ class VideoService:
             parameters["negative_prompt"] = negative_prompt
 
         input_payload = {"prompt": prompt}
-        if reference_image_urls:
+        if reference_video_urls:
+            reference_urls = (reference_video_urls[:3] + reference_image_urls[:5])[:5]
+            input_payload["reference_urls"] = reference_urls
+        elif reference_image_urls:
             input_payload["media"] = [
                 {"type": "reference_image", "url": url}
                 for url in reference_image_urls[:9]
@@ -232,6 +246,9 @@ class VideoService:
             "happyhorse-r2v": settings.HAPPYHORSE_R2V_MODEL,
             "r2v": settings.HAPPYHORSE_R2V_MODEL,
             "reference-to-video": settings.HAPPYHORSE_R2V_MODEL,
+            "wan-r2v": settings.WAN_R2V_MODEL,
+            "wan-reference": settings.WAN_R2V_MODEL,
+            "reference-video": settings.WAN_R2V_MODEL,
         }
         value = (model or settings.VIDEO_MODEL_DEFAULT).strip()
         return aliases.get(value, value)
