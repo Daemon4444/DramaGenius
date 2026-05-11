@@ -5,6 +5,7 @@ import StepNav from './StepNav'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
 const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
+const characterStorageKey = (projectId) => `dramagenius:characters:${projectId || 'global'}`
 
 const ROLE_TEMPLATES = [
   { type: '女主', suffix: '，包含一个坚强的女主角', color: '#F472B6' },
@@ -54,6 +55,7 @@ const EMPTY_CHARACTER = {
   coreDesire: '',
   speechStyle: '',
   memories: [],
+  referenceImages: [],
 }
 
 const DEMO_CHARACTERS = [
@@ -164,7 +166,10 @@ function TagInput({ tags, onChange, placeholder }) {
 /* -- Character Form Component -- */
 function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
   const fileInputRef = useRef(null)
+  const imageInputRef = useRef(null)
   const [activeSection, setActiveSection] = useState('basic')
+  const [uploadingRef, setUploadingRef] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   const update = (field, value) => {
     onChange({ ...character, [field]: value })
@@ -205,6 +210,8 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
         if (data.coreDesire) merged.coreDesire = data.coreDesire
         if (data.speechStyle) merged.speechStyle = data.speechStyle
         if (data.memories) merged.memories = data.memories
+        if (data.referenceImages) merged.referenceImages = data.referenceImages
+        if (data.referenceImageUrl) merged.referenceImages = [data.referenceImageUrl]
         onChange(merged)
       } catch {
         alert('JSON 格式错误，请检查文件内容')
@@ -212,6 +219,25 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  const handleReferenceUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingRef(true)
+    setUploadError('')
+    try {
+      const result = await soulApi.uploadReferenceImage(file)
+      onChange({
+        ...character,
+        referenceImages: [...(character.referenceImages || []), result.url],
+      })
+    } catch (err) {
+      setUploadError(err.message || '参考图上传失败')
+    } finally {
+      setUploadingRef(false)
+      e.target.value = ''
+    }
   }
 
   const sections = [
@@ -330,6 +356,41 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
                 placeholder="如: 复仇与证明自己"
                 className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.08] text-sm text-white/80 placeholder-white/20 focus:border-soul/40 focus:outline-none transition-colors"
               />
+            </div>
+
+            <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <label className="block text-[10px] text-cyan-100/60 mb-1">R2V 人物参考图</label>
+                  <p className="text-[9px] text-white/28">用于制片阶段 HappyHorse R2V 保持角色形象一致。图片必须能被 DashScope 公网访问。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={uploadingRef}
+                  className="px-3 py-2 rounded-lg bg-cyan-300/10 border border-cyan-300/20 text-[11px] text-cyan-100/70 hover:bg-cyan-300/15 disabled:opacity-45 transition-all"
+                >
+                  {uploadingRef ? '上传中...' : '上传参考图'}
+                </button>
+                <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/bmp" className="hidden" onChange={handleReferenceUpload} />
+              </div>
+              {uploadError && <p className="mb-2 text-[10px] text-red-300">{uploadError}</p>}
+              <input
+                type="url"
+                value={(character.referenceImages || [])[0] || ''}
+                onChange={e => update('referenceImages', e.target.value ? [e.target.value] : [])}
+                placeholder="也可以粘贴 OSS/CDN 图片 URL，例如 https://.../character.jpg"
+                className="w-full px-3 py-2.5 rounded-lg bg-black/20 border border-white/[0.08] text-xs text-white/75 placeholder-white/20 focus:border-cyan-300/35 focus:outline-none transition-colors"
+              />
+              {(character.referenceImages || []).length > 0 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto">
+                  {(character.referenceImages || []).slice(0, 4).map((url, i) => (
+                    <div key={`${url}-${i}`} className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+                      <img src={url} alt={`${character.name || '角色'}参考图${i + 1}`} className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -679,11 +740,24 @@ export default function SoulPanel() {
 
   /* pre-populate demo */
   useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(characterStorageKey(projectId)) || 'null')
+      if (Array.isArray(saved) && saved.length) {
+        setCharacters(saved)
+        return
+      }
+    } catch {}
     if (ENABLE_DEMO_DATA && projectId === 'demo-proj-002') {
       setCharacters(DEMO_CHARACTERS)
       setRelationships(DEMO_RELATIONSHIPS)
     }
   }, [projectId])
+
+  useEffect(() => {
+    try {
+      if (characters.length) localStorage.setItem(characterStorageKey(projectId), JSON.stringify(characters))
+    } catch {}
+  }, [characters, projectId])
 
   /* auto-fill concept from ProphetPanel navigation state */
   useEffect(() => {

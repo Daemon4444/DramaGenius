@@ -18,10 +18,10 @@ AI-native interactive short drama studio. DaraGenius combines trend analysis, ch
 - Studio project list with create/delete support
 - Project overview with pipeline, metrics, recent activity, and export menu
 - Prophet topic analysis with hot keywords, platform stats, and Qwen-powered trend analysis
-- Soul character engine with character generation, dialogue generation, TTS, voice preview, and OSS/public-host voice cloning
+- Soul character engine with character generation, dialogue generation, TTS, voice preview, OSS/public-host voice cloning, and R2V character reference images
 - Arbiter decision engine with scenario generation, decision design, and streaming branch simulation
 - Script workspace with episode list, AI generation, AI continuation, and copy workflow
-- Producer workspace with DB-backed hotspots, scripts, audience vote/comment APIs, production progress SSE, and HappyHorse/WAN text-to-video task submission
+- Producer workspace with DB-backed hotspots, scripts, audience vote/comment APIs, production progress SSE, HappyHorse/WAN text-to-video, and HappyHorse R2V reference-to-video task submission
 - Demo playback pages for the general demo and `浮华陷阱`
 - Workspace export to `json`, `fountain`, `docx`, and `pdf`
 
@@ -92,6 +92,8 @@ OSS_ACCESS_KEY_SECRET=
 OSS_BUCKET_NAME=dramagenius
 OSS_ENDPOINT=oss-cn-beijing.aliyuncs.com
 OSS_PUBLIC_BASE_URL=
+OSS_UPLOAD_PREFIX=dramagenius
+PUBLIC_HOST=
 ```
 
 Do not commit real API keys.
@@ -176,9 +178,125 @@ Important workflow endpoints:
 - `POST /api/workspace/continue` streams script continuation
 - `POST /api/workspace/export` creates `json`, `fountain`, `docx`, or `pdf`
 - `POST /api/soul/tts` returns MP3 audio
+- `POST /api/producer/references/upload` uploads a character/reference image and returns a DashScope-reachable public URL
 - `POST /api/producer/video/generate` submits HappyHorse/WAN video generation tasks
 - `GET /api/producer/video/status/{task_id}` checks video task status
 - `GET /api/producer/produce/progress/{task_id}` streams real DashScope task polling results
+
+## Core Character-to-Video Flow
+
+The main production flow is:
+
+```text
+Project
+  -> Prophet topic direction
+  -> Soul character profiles
+  -> character reference images
+  -> Script scenes
+  -> Producer shots
+  -> HappyHorse R2V video tasks
+  -> cached final MP4 URLs
+```
+
+The purpose of the R2V path is character consistency. A user can upload or paste public image URLs for each character in the Soul panel. The Producer panel reads those saved references for the same `project_id`, switches the shot model to `happyhorse-1.0-r2v`, and sends the reference images together with the shot prompt.
+
+HappyHorse R2V prompt convention:
+
+- The first reference image is `character1`.
+- The second reference image is `character2`.
+- Continue in array order up to `character9`.
+- Shot prompts should explicitly mention `character1`, `character2`, etc. when identity consistency matters.
+
+Example Producer request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/producer/video/generate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "project_id": "<project-id>",
+    "shot_id": "<shot-id>",
+    "model": "happyhorse-1.0-r2v",
+    "prompt": "character1 stands in a rainy neon street, cinematic close-up, emotional expression, vertical short drama shot",
+    "negative_prompt": "low quality, watermark, distorted face",
+    "size": "720*1280",
+    "duration": 5,
+    "reference_image_urls": [
+      "https://your-cdn.example.com/dramagenius/characters/heroine.png"
+    ]
+  }'
+```
+
+When `reference_image_urls` is not empty, the backend forces the model to `HAPPYHORSE_R2V_MODEL` and submits the official DashScope R2V payload shape:
+
+```json
+{
+  "model": "happyhorse-1.0-r2v",
+  "input": {
+    "prompt": "...",
+    "media": [
+      { "type": "reference_image", "url": "https://..." }
+    ]
+  },
+  "parameters": {
+    "resolution": "720P",
+    "ratio": "9:16",
+    "duration": 5,
+    "watermark": false
+  }
+}
+```
+
+After DashScope returns `SUCCEEDED`, `GET /api/producer/video/status/{task_id}` downloads the remote result and returns a local stable URL:
+
+```json
+{
+  "task_id": "...",
+  "status": "SUCCEEDED",
+  "video_url": "/api/producer/videos/<task_id>.mp4",
+  "cached": true
+}
+```
+
+## R2V Reference Image Upload Contract
+
+Endpoint:
+
+```text
+POST /api/producer/references/upload
+Content-Type: multipart/form-data
+field: image
+```
+
+Supported image types:
+
+- JPEG / JPG
+- PNG
+- WEBP
+- BMP
+
+Limits:
+
+- Maximum file size: 10 MB
+- Recommended shortest side: at least 400 px
+- Returned URL must be reachable by DashScope from the public internet
+
+Success response:
+
+```json
+{
+  "url": "https://your-cdn.example.com/dramagenius/r2v-references/2026/05/11/xxx.png",
+  "content_type": "image/png",
+  "filename": "heroine.png"
+}
+```
+
+Server-side implementation notes:
+
+- Preferred implementation is OSS upload through `storage_service.upload_bytes(...)`.
+- Configure `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_BUCKET_NAME`, `OSS_ENDPOINT`, and `OSS_PUBLIC_BASE_URL`.
+- If OSS is not used, `PUBLIC_HOST` must point to a public backend/static host accessible by DashScope.
+- Local `127.0.0.1`, `localhost`, private LAN IPs, or unsigned internal object URLs will not work for R2V.
+- The frontend also accepts a manually pasted public image URL, so the server can implement separate asset management later without changing the Producer API.
 
 ## Export Files
 
@@ -201,7 +319,7 @@ The API returns a relative `download_url`, for example:
 
 ## Voice Clone Note
 
-Voice clone requires DashScope to fetch the uploaded reference audio from a public URL. Configure OSS for production:
+Voice clone and R2V reference images require DashScope to fetch uploaded media from public URLs. Configure OSS for production:
 
 ```bash
 OSS_ACCESS_KEY_ID=...
@@ -209,9 +327,10 @@ OSS_ACCESS_KEY_SECRET=...
 OSS_BUCKET_NAME=dramagenius
 OSS_ENDPOINT=oss-cn-beijing.aliyuncs.com
 OSS_PUBLIC_BASE_URL=https://your-public-cdn.example.com
+OSS_UPLOAD_PREFIX=dramagenius
 ```
 
-If OSS is not configured, `PUBLIC_HOST` can be used as a fallback only when it is reachable by DashScope. Production mode returns an error instead of silently falling back to preset voices.
+If OSS is not configured, `PUBLIC_HOST` can be used as a fallback only when it is reachable by DashScope. Production mode returns an error instead of silently falling back to local-only media.
 
 ## Social Data Ingestion
 
@@ -247,7 +366,7 @@ For a full non-demo deployment, configure and verify:
 - Elasticsearch
 - DashScope/Bailian API key
 - Public file hosting for voice clone reference audio
-- OSS storage or a DashScope-reachable `PUBLIC_HOST`
+- OSS storage or a DashScope-reachable `PUBLIC_HOST` for voice clone audio and R2V character images
 - Real crawler data in Elasticsearch
 
 ## Useful Commands

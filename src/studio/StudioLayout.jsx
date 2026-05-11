@@ -296,7 +296,13 @@ export default function StudioLayout() {
         `}
       >
         {/* Brand header */}
-        <div className="h-16 flex items-center px-3 border-b border-white/[0.07] gap-2.5 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="h-16 flex items-center px-3 border-b border-white/[0.07] gap-2.5 flex-shrink-0 text-left hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 transition-colors"
+          aria-label="返回首页"
+          title="返回首页"
+        >
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-300/20 via-amber-300/15 to-rose-300/10 border border-white/[0.1] flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-500/5">
             <span className="font-display font-bold text-sm text-cyan-100/80">D</span>
           </div>
@@ -311,7 +317,7 @@ export default function StudioLayout() {
               <StatusBadge completedSteps={completedSteps} />
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Back button */}
         <button

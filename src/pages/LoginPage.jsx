@@ -86,14 +86,20 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-sm px-6">
         {/* Logo */}
-        <div className="text-center mb-10">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="block w-full text-center mb-10 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/45"
+          aria-label="返回首页"
+          title="返回首页"
+        >
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
             style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(139,92,246,0.1))', border: '1px solid rgba(245,158,11,0.2)' }}>
             <span className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #F59E0B, #8B5CF6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>D</span>
           </div>
           <div className="font-mono text-[11px] tracking-[0.25em] text-white/25 uppercase mb-1">DramaGenius</div>
           <div className="font-mono text-[10px] tracking-[0.2em] text-white/15 uppercase">AI Short Drama Studio</div>
-        </div>
+        </button>
 
         {/* 登录卡片 */}
         <div className="rounded-2xl p-8"

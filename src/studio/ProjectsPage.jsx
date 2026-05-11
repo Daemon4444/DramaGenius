@@ -4,7 +4,7 @@ import { workspaceApi } from '../services/api'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
 const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
-const DEMO_LANDING = { 'proj-fuhua': 'demo', 'demo-proj-002': 'demo' }
+const DEMO_LANDING = { 'proj-fuhua': 'demo' }
 
 // 浮华陷阱 Demo 项目（始终注入到项目列表）
 const FUHUA_PROJECT = {
@@ -82,6 +82,15 @@ const SORT_OPTIONS = [
 ]
 
 const WORKFLOW_ORDER = ['overview', 'prophet', 'soul', 'arbiter', 'script', 'producer']
+const WORKFLOW_LABELS = {
+  overview: '概览',
+  prophet: '选题',
+  soul: '角色',
+  arbiter: '剧情',
+  script: '剧本',
+  producer: '制片',
+  demo: '演示',
+}
 
 const GENRE_CHIPS = [
   '甜宠', '虐恋', '悬疑', '科幻', '古装', '都市', '玄幻', '喜剧', '校园', '穿越',
@@ -112,10 +121,14 @@ function formatWordCount(count) {
 }
 
 function nextProjectStep(project) {
-  if (DEMO_LANDING[project.id]) return DEMO_LANDING[project.id]
+  if (DEMO_LANDING[project.id] && project.progress >= 100) return DEMO_LANDING[project.id]
   const stages = project.stages || {}
   if (!project.progress) return 'overview'
   return WORKFLOW_ORDER.slice(1).find(step => !stages[step]) || 'producer'
+}
+
+function nextStepLabel(project) {
+  return WORKFLOW_LABELS[nextProjectStep(project)] || '概览'
 }
 
 /* ─── Delete Confirmation Dialog ─── */
@@ -245,8 +258,8 @@ export default function ProjectsPage() {
           const data = await workspaceApi.getProjects()
           const list = data.projects || []
           const apiProjects = list.map(p => {
-            if (ENABLE_DEMO_DATA && DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
-            if (ENABLE_DEMO_DATA && p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
+            if (DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
+            if (p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
             return {
               id: p.id,
               title: p.title,
@@ -345,6 +358,28 @@ export default function ProjectsPage() {
     return counts
   }, [projects])
 
+  const studioStats = useMemo(() => {
+    const totalWords = projects.reduce((sum, p) => sum + (p.wordCount || 0), 0)
+    const totalEpisodes = projects.reduce((sum, p) => sum + (p.episodeCount || 0), 0)
+    const activeCount = projects.filter(p => p.status !== 'completed').length
+    const avgProgress = projects.length
+      ? Math.round(projects.reduce((sum, p) => sum + (p.progress || 0), 0) / projects.length)
+      : 0
+    return { totalWords, totalEpisodes, activeCount, avgProgress }
+  }, [projects])
+
+  const continueProject = useMemo(() => {
+    return [...projects]
+      .filter(p => p.status !== 'completed')
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
+      || [...projects].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
+      || null
+  }, [projects])
+
+  const openProject = useCallback((project) => {
+    navigate(`/studio/project/${project.id}/${nextProjectStep(project)}`)
+  }, [navigate])
+
   const handleCreate = async () => {
     if (!newTitle.trim()) return
     setCreating(true)
@@ -427,7 +462,7 @@ export default function ProjectsPage() {
         <div
           key={proj.id}
           className="group flex items-center gap-5 px-5 py-4 rounded-2xl bg-white/[0.035] border border-white/[0.07] hover:border-cyan-300/20 hover:bg-white/[0.055] transition-all cursor-pointer animate-fade-up shadow-lg shadow-black/5"
-          onClick={() => navigate(`/studio/project/${proj.id}/${nextProjectStep(proj)}`)}
+          onClick={() => openProject(proj)}
         >
           {/* Left: title + concept */}
           <div className="flex-1 min-w-0">
@@ -461,7 +496,7 @@ export default function ProjectsPage() {
           {/* Right: time + actions */}
           <div className="flex items-center gap-4 flex-shrink-0">
             <span className="text-[10px] text-white/20 font-mono hidden lg:inline">
-              {getRelativeTime(proj.updatedAt)}
+              {nextStepLabel(proj)}
             </span>
             <button
               onClick={(e) => { e.stopPropagation(); setDeleteTarget(proj) }}
@@ -484,7 +519,7 @@ export default function ProjectsPage() {
     return (
       <div
         key={proj.id}
-        onClick={() => navigate(`/studio/project/${proj.id}/${nextProjectStep(proj)}`)}
+        onClick={() => openProject(proj)}
         className="group p-5 rounded-2xl bg-white/[0.035] border border-white/[0.07] hover:border-cyan-300/20 hover:bg-white/[0.055] transition-all cursor-pointer animate-fade-up shadow-lg shadow-black/5"
       >
         {/* Header: title + status + delete */}
@@ -568,7 +603,7 @@ export default function ProjectsPage() {
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
           <span className="text-[10px] text-white/20 font-mono">{getRelativeTime(proj.updatedAt)}</span>
           <span className="text-[10px] text-white/30 group-hover:text-white/50 transition-colors">
-            进入工作台 →
+            继续：{nextStepLabel(proj)} →
           </span>
         </div>
       </div>
@@ -576,18 +611,24 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#131320] organic-bg grain-overlay">
+    <div className="min-h-screen bg-[#10131a] text-slate-100">
       {/* ─── Header ─── */}
-      <header className="h-16 flex items-center justify-between px-8 border-b border-white/[0.06] bg-surface-50/30 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-prophet/20 via-soul/20 to-arbiter/20 border border-white/[0.08] flex items-center justify-center">
-            <span className="font-display font-bold text-base text-white/50">D</span>
+      <header className="sticky top-0 z-30 h-16 flex items-center justify-between px-5 sm:px-8 border-b border-white/[0.07] bg-[#11141d]/92 backdrop-blur-xl">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="flex items-center gap-3 text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          aria-label="返回首页"
+          title="返回首页"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-300/20 via-amber-300/15 to-rose-300/10 border border-white/[0.1] flex items-center justify-center shadow-lg shadow-cyan-500/5">
+            <span className="font-display font-bold text-base text-cyan-100/75">D</span>
           </div>
           <div>
             <h1 className="text-base font-display font-bold text-white/80">DramaGenius Studio</h1>
-            <p className="text-[10px] text-white/25 font-mono">AI 互动短剧创作平台</p>
+            <p className="text-[10px] text-white/25 font-mono">个人创作工作台</p>
           </div>
-        </div>
+        </button>
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/')}
@@ -601,26 +642,86 @@ export default function ProjectsPage() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-8 py-10">
-        {/* ─── Title row ─── */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-display font-bold text-white/85 mb-1">我的项目</h2>
-            <p className="text-sm text-white/30">
-              {loading ? '加载中...' : `共 ${projects.length} 个项目`}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-prophet/80 to-soul/80 text-white text-sm font-medium hover:from-prophet hover:to-soul transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-prophet/5"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            新建项目
-          </button>
-        </div>
+      <main className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_18%_12%,rgba(34,211,238,0.12),transparent_34%),radial-gradient(circle_at_88%_8%,rgba(251,191,36,0.1),transparent_28%)]" />
+        <div className="relative max-w-7xl mx-auto px-5 sm:px-8 py-8 lg:py-10">
+          {/* ─── Dashboard hero ─── */}
+          <section className="mb-7 grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-5">
+            <div className="min-h-[220px] rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 lg:p-7 shadow-2xl shadow-black/15">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                <div>
+                  <p className="text-[11px] text-cyan-200/55 font-mono tracking-[0.18em] uppercase">Personal Studio</p>
+                  <h2 className="mt-2 text-2xl lg:text-3xl font-display font-bold text-white/90">我的创作台</h2>
+                  <p className="mt-2 max-w-xl text-sm text-white/38 leading-6">
+                    按真实创作顺序继续：选题、角色、剧情、剧本、制片。项目卡片会直接进入下一项待完成工作。
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCreate(true)}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-300 to-amber-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/10 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  新建项目
+                </button>
+              </div>
+
+              <div className="mt-7 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  ['项目', loading ? '-' : projects.length, '全部创作'],
+                  ['进行中', loading ? '-' : studioStats.activeCount, '待推进'],
+                  ['剧集', loading ? '-' : studioStats.totalEpisodes, '已规划'],
+                  ['平均进度', loading ? '-' : `${studioStats.avgProgress}%`, '工作流'],
+                ].map(([label, value, hint]) => (
+                  <div key={label} className="rounded-xl border border-white/[0.06] bg-black/15 px-4 py-3">
+                    <div className="text-[10px] text-white/28">{label}</div>
+                    <div className="mt-1 text-xl font-mono font-semibold text-white/82">{value}</div>
+                    <div className="mt-1 text-[10px] text-white/22">{hint}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5 shadow-2xl shadow-black/10">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] font-mono text-white/35 uppercase tracking-[0.16em]">继续工作</span>
+                {continueProject && <span className="text-[10px] text-white/24">{getRelativeTime(continueProject.updatedAt)}</span>}
+              </div>
+              {continueProject ? (
+                <button
+                  type="button"
+                  onClick={() => openProject(continueProject)}
+                  className="w-full text-left rounded-xl border border-cyan-300/15 bg-cyan-300/[0.055] p-4 transition-all hover:border-cyan-300/30 hover:bg-cyan-300/[0.08]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-display font-bold text-white/86">{continueProject.title}</h3>
+                      <p className="mt-1 line-clamp-2 text-xs text-white/35">{continueProject.concept}</p>
+                    </div>
+                    <span className="rounded-full bg-amber-300/12 px-2 py-1 text-[10px] text-amber-200/80">
+                      {nextStepLabel(continueProject)}
+                    </span>
+                  </div>
+                  <div className="mt-4 h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-amber-300 to-rose-300"
+                      style={{ width: `${continueProject.progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-white/32">{continueProject.progress}% 完成</span>
+                    <span className="text-xs font-medium text-cyan-100/75">进入 {nextStepLabel(continueProject)} →</span>
+                  </div>
+                </button>
+              ) : (
+                <div className="rounded-xl border border-dashed border-white/[0.08] p-5 text-sm text-white/30">
+                  还没有项目，创建一个新项目开始。
+                </div>
+              )}
+            </div>
+          </section>
 
         {/* ─── Error banner ─── */}
         {error && (
@@ -785,6 +886,7 @@ export default function ProjectsPage() {
           </div>
         )}
       </div>
+      </main>
 
       {/* ─── Create Project Modal ─── */}
       {showCreate && (

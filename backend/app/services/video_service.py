@@ -44,6 +44,7 @@ class VideoService:
         negative_prompt: str = "",
         prompt_extend: bool = True,
         seed: int | None = None,
+        reference_image_urls: list[str] | None = None,
     ) -> dict:
         """
         提交视频生成任务（异步）
@@ -52,7 +53,10 @@ class VideoService:
         if not self.api_key:
             raise ValueError("DASHSCOPE_API_KEY 未设置")
 
+        reference_image_urls = [u for u in (reference_image_urls or []) if u]
         model = self.normalize_model(model or settings.VIDEO_MODEL_DEFAULT)
+        if reference_image_urls:
+            model = settings.HAPPYHORSE_R2V_MODEL
 
         VS = _get_video_synthesis()
         if not VS or model.startswith(("happyhorse-", "wanx")):
@@ -64,6 +68,7 @@ class VideoService:
                 negative_prompt=negative_prompt,
                 prompt_extend=prompt_extend,
                 seed=seed,
+                reference_image_urls=reference_image_urls,
             )
 
         loop = asyncio.get_event_loop()
@@ -134,9 +139,13 @@ class VideoService:
         negative_prompt: str = "",
         prompt_extend: bool = True,
         seed: int | None = None,
+        reference_image_urls: list[str] | None = None,
     ) -> dict:
         """DashScope HTTP async task API fallback for SDK versions without VideoSynthesis."""
+        reference_image_urls = [u for u in (reference_image_urls or []) if u]
         model = self.normalize_model(model)
+        if reference_image_urls:
+            model = settings.HAPPYHORSE_R2V_MODEL
         resolution, ratio = self._normalize_video_size(size)
         parameters = {"watermark": False}
         if model.startswith("happyhorse-"):
@@ -148,9 +157,16 @@ class VideoService:
         if negative_prompt and not model.startswith("happyhorse-"):
             parameters["negative_prompt"] = negative_prompt
 
+        input_payload = {"prompt": prompt}
+        if reference_image_urls:
+            input_payload["media"] = [
+                {"type": "reference_image", "url": url}
+                for url in reference_image_urls[:9]
+            ]
+
         payload = {
             "model": model,
-            "input": {"prompt": prompt},
+            "input": input_payload,
             "parameters": parameters,
         }
         url = f"{settings.VIDEO_API_BASE.rstrip('/')}/services/aigc/video-generation/video-synthesis"
@@ -213,6 +229,9 @@ class VideoService:
             "hobby-house": settings.HAPPYHORSE_T2V_MODEL,
             "hobbyhouse": settings.HAPPYHORSE_T2V_MODEL,
             "happyhorse-one": settings.HAPPYHORSE_T2V_MODEL,
+            "happyhorse-r2v": settings.HAPPYHORSE_R2V_MODEL,
+            "r2v": settings.HAPPYHORSE_R2V_MODEL,
+            "reference-to-video": settings.HAPPYHORSE_R2V_MODEL,
         }
         value = (model or settings.VIDEO_MODEL_DEFAULT).strip()
         return aliases.get(value, value)

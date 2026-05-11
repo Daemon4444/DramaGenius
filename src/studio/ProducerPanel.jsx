@@ -9,6 +9,7 @@ const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
 const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const MODELS = [
+  { id: 'happyhorse-1.0-r2v', label: 'HappyHorse R2V', desc: '角色参考图 · 形象一致', badge: '人' },
   { id: 'happyhorse-1.0-t2v', label: 'HappyHorse 1.0', desc: '720P/1080P · 有声叙事', badge: '声' },
   { id: 'wanx2.1-t2v-turbo',  label: 'One Turbo',       desc: 'Wanx 2.1 · 快速预览',   badge: '快' },
   { id: 'wanx2.1-t2v-plus',   label: 'One Plus',        desc: 'Wanx 2.1 · 高质量',     badge: '精' },
@@ -55,6 +56,7 @@ const makeShot = (overrides = {}, globalModel = 'happyhorse-1.0-t2v', globalSize
 
 const shotStorageKey = (projectId) => `dramagenius:producer-shots:${projectId || 'global'}`
 const scriptStorageKey = (projectId) => `dramagenius:script-drafts:${projectId || 'global'}`
+const characterStorageKey = (projectId) => `dramagenius:characters:${projectId || 'global'}`
 
 function splitScriptIntoShots(text, title = '剧本分镜') {
   const cleaned = String(text || '').trim()
@@ -258,6 +260,7 @@ export default function ProducerPanel() {
   const [showPreview, setShowPreview] = useState(false)
   const [importing, setImporting] = useState(false)
   const [panelNotice, setPanelNotice] = useState('')
+  const [referenceImages, setReferenceImages] = useState([])
   const pollTimers = useRef({})
   const shotsRef = useRef(shots)
 
@@ -283,6 +286,18 @@ export default function ProducerPanel() {
     } catch {}
   }, [projectId, shots])
 
+  useEffect(() => {
+    try {
+      const chars = JSON.parse(localStorage.getItem(characterStorageKey(projectId)) || '[]')
+      const refs = (Array.isArray(chars) ? chars : [])
+        .flatMap(c => c.referenceImages || (c.referenceImageUrl ? [c.referenceImageUrl] : []))
+        .filter(Boolean)
+      setReferenceImages([...new Set(refs)].slice(0, 9))
+    } catch {
+      setReferenceImages([])
+    }
+  }, [projectId])
+
   // cleanup on unmount
   useEffect(() => {
     return () => {
@@ -304,6 +319,13 @@ export default function ProducerPanel() {
         ? { ...s, model: modelId }
         : s
     )))
+  }
+
+  const enableR2V = () => {
+    applyGlobalModel('happyhorse-1.0-r2v')
+    setPanelNotice(referenceImages.length
+      ? `已启用 R2V：将使用 ${referenceImages.length} 张角色参考图，提示词中可用 character1、character2 指代。`
+      : '请先在「角色」步骤上传人物参考图，或粘贴公网图片 URL。')
   }
 
   const applyGlobalSize = (size) => {
@@ -411,6 +433,10 @@ export default function ProducerPanel() {
     // read from ref to avoid stale closure
     const shot = shotsRef.current.find(s => s.id === shotId)
     if (!shot || !shot.prompt.trim()) return
+    if (shot.model === 'happyhorse-1.0-r2v' && referenceImages.length === 0) {
+      updateShot(shotId, { status: 'error', error: 'R2V 需要至少 1 张人物参考图', progress: 0 })
+      return
+    }
 
     updateShot(shotId, { status: 'submitting', error: null, videoUrl: null, progress: 0 })
 
@@ -423,6 +449,7 @@ export default function ProducerPanel() {
         model: shot.model,
         size: shot.size,
         duration: shot.duration,
+        reference_image_urls: shot.model === 'happyhorse-1.0-r2v' ? referenceImages : [],
       })
       if (!data) throw new Error('请求失败')
       updateShot(shotId, { status: 'pending', taskId: data.task_id, progress: 5 })
@@ -430,7 +457,7 @@ export default function ProducerPanel() {
     } catch (err) {
       updateShot(shotId, { status: 'error', error: err.message, progress: 0 })
     }
-  }, [updateShot])
+  }, [projectId, referenceImages, updateShot])
 
   /* ─── API: poll (uses ref to avoid stale closure bug) ─────────────── */
 
@@ -497,6 +524,7 @@ export default function ProducerPanel() {
   const completedVideos = shots.filter(s => s.status === 'done' && s.videoUrl).map(s => s.videoUrl)
   const hasAnyPrompt = shots.some(s => s.prompt.trim())
   const activeModel = useMemo(() => MODELS.find(m => m.id === globalModel) || MODELS[0], [globalModel])
+  const r2vActive = globalModel === 'happyhorse-1.0-r2v'
 
   /* ─── Aspect ratio helper ─────────────────────────────────────────── */
 
@@ -633,6 +661,17 @@ export default function ProducerPanel() {
 
         <div className="flex-1" />
 
+        <button
+          onClick={enableR2V}
+          className={`px-4 py-2 rounded-xl border text-[11px] font-medium transition-all ${
+            r2vActive
+              ? 'border-cyan-300/35 bg-cyan-300/15 text-cyan-100'
+              : 'border-white/[0.08] bg-white/[0.03] text-white/45 hover:text-cyan-100 hover:border-cyan-300/25'
+          }`}
+        >
+          R2V 角色参考 · {referenceImages.length} 张
+        </button>
+
         {/* Import from script */}
         <button
           onClick={importFromScript}
@@ -651,6 +690,39 @@ export default function ProducerPanel() {
           批量生成
         </button>
       </div>
+
+      {(r2vActive || referenceImages.length > 0) && (
+        <div className="mb-5 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.045] p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <div className="text-xs font-medium text-cyan-100/80">HappyHorse R2V 角色一致性</div>
+              <div className="text-[10px] text-white/32 mt-1">
+                生成时会把参考图按顺序传给 DashScope：第 1 张对应 character1，第 2 张对应 character2。提示词里写 character1/character2 可锁定人物。
+              </div>
+            </div>
+            <button
+              onClick={() => setReferenceImages([])}
+              className="text-[10px] text-white/25 hover:text-white/55"
+            >
+              清空
+            </button>
+          </div>
+          {referenceImages.length > 0 ? (
+            <div className="flex gap-2 overflow-x-auto">
+              {referenceImages.map((url, idx) => (
+                <div key={`${url}-${idx}`} className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/[0.08] bg-black/20">
+                  <img src={url} alt={`character${idx + 1}`} className="h-full w-full object-cover" />
+                  <span className="absolute left-1 top-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] text-cyan-100">character{idx + 1}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-amber-100/70">
+              暂无参考图。请在「角色」步骤为人物上传参考图，或粘贴公网图片 URL。
+            </div>
+          )}
+        </div>
+      )}
 
       {panelNotice && (
         <div className="mb-5 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-4 py-3 text-xs text-cyan-100/75">

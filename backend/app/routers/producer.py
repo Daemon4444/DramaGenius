@@ -5,6 +5,7 @@ Producer 视频制片路由
 import json
 import os
 import time
+from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from app.models.producer import (
     AudienceComment, VideoProduction, StorylineNode, StorylineEdge,
 )
 from app.services.producer_service import producer_service
+from app.services.storage_service import StorageNotConfigured, storage_service
 from app.services.llm_service import qwen_service
 from app.utils.auth import get_current_user_id, get_current_user_id_optional
 from app.utils.streaming import format_sse
@@ -883,6 +885,7 @@ class VideoGenerateRequest(BaseModel):
     duration: int = 5
     seed: Optional[int] = None
     prompt_extend: bool = True
+    reference_image_urls: List[str] = []
 
 
 @router.post("/video/generate")
@@ -898,8 +901,12 @@ async def video_generate(req: VideoGenerateRequest):
             negative_prompt=req.negative_prompt,
             prompt_extend=req.prompt_extend,
             seed=req.seed,
+            reference_image_urls=req.reference_image_urls,
         )
         result["model"] = video_service.normalize_model(req.model)
+        if req.reference_image_urls:
+            result["model"] = settings.HAPPYHORSE_R2V_MODEL
+            result["reference_image_count"] = len(req.reference_image_urls)
         result["project_id"] = req.project_id
         result["shot_id"] = req.shot_id
         return result
@@ -944,3 +951,45 @@ async def video_status(task_id: str):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/references/upload")
+async def upload_reference_image(
+    image: UploadFile = File(..., description="人物/道具参考图，供 HappyHorse R2V 使用")
+):
+    """上传 R2V 参考图，返回 DashScope 可访问的公网 URL。"""
+    content_type = (image.content_type or "").lower()
+    allowed = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/bmp"}
+    if content_type not in allowed:
+        raise HTTPException(status_code=400, detail="参考图只支持 JPG/PNG/WEBP/BMP")
+
+    data = await image.read()
+    if len(data) < 1024:
+        raise HTTPException(status_code=400, detail="参考图文件过小")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="参考图不能超过 10MB")
+
+    filename = image.filename or f"reference-{uuid4().hex}.jpg"
+    try:
+        url = await storage_service.upload_bytes(
+            data,
+            filename=filename,
+            content_type=image.content_type,
+            prefix="r2v-references",
+        )
+    except StorageNotConfigured:
+        if not settings.PUBLIC_HOST:
+            raise HTTPException(
+                status_code=503,
+                detail="R2V 参考图需要 OSS 或 PUBLIC_HOST，DashScope 必须能访问公网图片 URL"
+            )
+        ref_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "references")
+        os.makedirs(ref_dir, exist_ok=True)
+        safe_name = "".join(ch for ch in filename if ch.isalnum() or ch in (".", "-", "_")) or "reference.jpg"
+        local_name = f"{uuid4().hex}_{safe_name}"
+        local_path = os.path.join(ref_dir, local_name)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        url = f"{settings.PUBLIC_HOST.rstrip('/')}/static/temp/references/{local_name}"
+
+    return {"url": url, "content_type": image.content_type, "filename": filename}
