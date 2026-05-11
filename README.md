@@ -22,8 +22,54 @@ AI-native interactive short drama studio. DaraGenius combines trend analysis, ch
 - Arbiter decision engine with scenario generation, decision design, and streaming branch simulation
 - Script workspace with episode list, AI generation, AI continuation, and copy workflow
 - Producer workspace with DB-backed hotspots, scripts, audience vote/comment APIs, production progress SSE, HappyHorse/WAN text-to-video, and HappyHorse R2V reference-to-video task submission
-- Demo playback pages for the general demo and `浮华陷阱`
+- Demo playback pages for the two bundled projects: `浮华陷阱` and `数字芯尘：意识永生计划`
 - Workspace export to `json`, `fountain`, `docx`, and `pdf`
+
+## Bundled Project Assets
+
+The app currently keeps two built-in showcase projects. They are intentionally project-specific: scripts, characters, branches, and videos should not cross over between projects.
+
+### 浮华陷阱
+
+- Project id: `proj-fuhua`
+- Type: urban suspense interactive short drama
+- Characters in Studio / Soul:
+  - `顾晚`
+  - `陆时谦`
+  - `宋秘书`
+- Producer imported scripts:
+  - `第一集 · 猎物与猎手的名利场`
+  - `第二集A · 带刺的玫瑰`
+  - `第二集B · 完美的金丝雀`
+  - `第二集C · 恶女的筹码`
+- Demo video assets:
+  - `public/drama/fuhua/浮华陷阱-第1集.mp4`
+  - `public/drama/fuhua/浮华陷阱-第2集-A宁为玉碎.mp4`
+  - `public/drama/fuhua/浮华陷阱-第2集-B蛰伏伪装.mp4`
+  - `public/drama/fuhua/浮华陷阱-第2集-C绝地谈判.mp4`
+- Source script document:
+  - `public/drama/fuhua/浮华陷阱短剧剧本.docx`
+
+### 数字芯尘：意识永生计划
+
+- Project id: `demo-proj-002`
+- Type: cyberpunk sci-fi interactive short drama
+- Characters in Studio / Soul:
+  - `陈国栋`
+  - `纽扣芯片`
+  - `陈念`
+  - `主治医生`
+  - `AI管理员`
+- Producer imported scripts:
+  - `第一集 · 病榻回响`
+  - `第二集A · 遗忘`
+  - `第二集B · 永生`
+- Demo video assets:
+  - `public/videos/第一集-病榻回响.mp4`
+  - `public/videos/第二集A-遗忘.mp4`
+  - `public/videos/第二集B-永生.mp4`
+
+Unknown or newly created projects do not silently import either bundled script set. They must use their own generated or user-provided script data before production.
 
 ## Project Layout
 
@@ -200,6 +246,16 @@ Project
 
 The purpose of the R2V path is character consistency. A user can upload or paste public image URLs for each character in the Soul panel. The Producer panel reads those saved references for the same `project_id`, switches the shot model to `happyhorse-1.0-r2v`, and sends the reference images together with the shot prompt.
 
+The verified main path is:
+
+1. Create or open a project.
+2. Add characters in Soul.
+3. Upload or paste character reference images. The backend stores uploads in OSS through `POST /api/producer/references/upload`.
+4. Import or write script scenes in Producer.
+5. Generate a shot with `happyhorse-1.0-r2v`.
+6. Poll `GET /api/producer/video/status/{task_id}` until `SUCCEEDED`.
+7. The backend caches the final MP4 and returns `/api/producer/videos/<task_id>.mp4`.
+
 HappyHorse R2V prompt convention:
 
 - The first reference image is `character1`.
@@ -277,7 +333,8 @@ Supported image types:
 Limits:
 
 - Maximum file size: 10 MB
-- Recommended shortest side: at least 400 px
+- Required shortest side for HappyHorse R2V: at least 400 px
+- File content must be a valid image matching the declared type; a non-image binary uploaded as `.png` will be rejected by DashScope.
 - Returned URL must be reachable by DashScope from the public internet
 
 Success response:
@@ -345,15 +402,33 @@ The script runs the available Weibo, Douyin, Xiaohongshu, and Bilibili crawlers 
 
 ## Verification Summary
 
-Latest local verification for the production-mode hardening:
+Latest local verification:
 
 Verified:
 
 - Backend Python compile with `backend/.venv311/bin/python -m py_compile`.
 - Backend app import and Celery app import.
 - Frontend production build with the bundled Node runtime.
+- Project list returns only `proj-fuhua` and `demo-proj-002` for the bundled showcase state.
+- Studio / Soul shows project-specific characters:
+  - `proj-fuhua`: `顾晚`, `陆时谦`, `宋秘书`
+  - `demo-proj-002`: `陈国栋`, `纽扣芯片`, `陈念`, `主治医生`, `AI管理员`
+- Producer script import is project-specific:
+  - `proj-fuhua` returns the `浮华陷阱` script set.
+  - `demo-proj-002` returns the `病榻回响 / 遗忘 / 永生` script set.
+  - Unknown projects return an empty script list instead of falling back to bundled scripts.
+- Demo MP4 assets exist for both projects and are non-empty.
+- OSS upload path was verified against an Alibaba Cloud OSS bucket.
+- HappyHorse R2V was verified end-to-end with a public OSS reference image URL. The task reached `SUCCEEDED`, and the backend cached the returned video as a local MP4.
 - Strict API checks proving `DEV_SKIP_DB=true` plus `ALLOW_DEMO_DATA=false` blocks fake login, in-memory projects, no-project Producer data, no-interaction votes, and demo voice preview.
 - `/ready` reports missing Redis/Elasticsearch when services are not running instead of pretending readiness.
+
+R2V validation notes from testing:
+
+- Public OSS URL returned `200 OK`.
+- Reference image must be at least `400x400`.
+- Invalid image bytes with a `.png` filename are rejected by DashScope.
+- Successful local test task produced `/api/producer/videos/<task_id>.mp4`.
 
 Local limitation: this machine does not have Docker installed and ports `5432`, `6379`, and `9200` were closed, so PostgreSQL/Redis/Elasticsearch could not be started here for a live full-dependency run. Run the Compose stack above in a Docker-capable environment, then verify `/ready` returns `ready`.
 
