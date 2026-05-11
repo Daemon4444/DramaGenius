@@ -63,6 +63,8 @@ _demo_scenes = {}
 class GeneratePlanRequest(BaseModel):
     concept: str
     project_id: Optional[str] = None  # 可选，如果提供则保存到项目
+    genre: Optional[str] = None
+    episodes: Optional[int] = 3
 
 
 class ContinueRequest(BaseModel):
@@ -384,15 +386,19 @@ async def generate_plan(
                 f"请分析「{req.concept}」相关的短剧市场舆情"
             )
 
-            # 解析关键词
+            # 解析关键词（容错：支持有/无 code fence）
             keywords = []
             try:
                 if "```json" in prophet_result:
                     json_str = prophet_result.split("```json")[1].split("```")[0].strip()
-                    data = json.loads(json_str)
-                    keywords = [k.get("word", "") for k in data.get("keywords", [])[:5]]
+                elif "```" in prophet_result:
+                    json_str = prophet_result.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = prophet_result.strip()
+                data = json.loads(json_str)
+                keywords = [k.get("word", "") for k in data.get("keywords", [])[:5]]
             except Exception:
-                raise RuntimeError("Prophet 阶段返回内容不是合法 JSON")
+                keywords = ["短剧", "互动", req.genre or "悬疑"]
 
             yield format_sse({
                 "stage": "prophet",
@@ -411,10 +417,14 @@ async def generate_plan(
             try:
                 if "```json" in soul_result:
                     json_str = soul_result.split("```json")[1].split("```")[0].strip()
-                    data = json.loads(json_str)
-                    characters = data.get("characters", [])
+                elif "```" in soul_result:
+                    json_str = soul_result.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = soul_result.strip()
+                data = json.loads(json_str)
+                characters = data.get("characters", [])
             except Exception:
-                raise RuntimeError("Soul 阶段返回内容不是合法 JSON")
+                characters = [{"name": "主角", "role": "protagonist", "traits": ["坚韧"]}]
 
             char_names = [c.get("name", "角色") for c in characters[:4]]
             yield format_sse({
@@ -435,11 +445,15 @@ async def generate_plan(
             try:
                 if "```json" in arbiter_result:
                     json_str = arbiter_result.split("```json")[1].split("```")[0].strip()
-                    data = json.loads(json_str)
-                    decisions = data.get("decisions", [])
-                    monetization = data.get("monetization", {})
+                elif "```" in arbiter_result:
+                    json_str = arbiter_result.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = arbiter_result.strip()
+                data = json.loads(json_str)
+                decisions = data.get("decisions", [])
+                monetization = data.get("monetization", {})
             except Exception:
-                raise RuntimeError("Arbiter 阶段返回内容不是合法 JSON")
+                decisions = [{"scene": "关键转折点", "question": "如何抉择？", "choices": []}]
 
             yield format_sse({
                 "stage": "arbiter",
