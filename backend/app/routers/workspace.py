@@ -31,8 +31,9 @@ settings = get_settings()
 def _demo_enabled() -> bool:
     return bool(settings.DEV_SKIP_DB and settings.ALLOW_DEMO_DATA)
 
-# Demo 模式下的内存存储。预置项目只给未登录/默认 demo 用户，不跨账号泄漏。
+# Demo 模式下的内存存储。内置展示项目对所有账号可见；用户新建项目仍按账号隔离。
 _DEMO_USER = "00000000-0000-0000-0000-000000000001"
+_BUILTIN_PROJECT_IDS = {"proj-fuhua", "demo-proj-002"}
 _demo_projects = {
     "proj-fuhua": {
         "id": "proj-fuhua",
@@ -670,7 +671,7 @@ async def get_project(
         if not settings.ALLOW_DEMO_DATA:
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目详情不可用于生产验证")
         proj = _demo_projects.get(project_id)
-        if not proj or proj.get("user_id") != user_id:
+        if not proj or (proj.get("id") not in _BUILTIN_PROJECT_IDS and proj.get("user_id") != user_id):
             raise HTTPException(status_code=404, detail="项目不存在")
         return proj
 
@@ -730,6 +731,8 @@ async def delete_project(
         if not settings.ALLOW_DEMO_DATA:
             raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目删除不可用于生产验证")
         project = _demo_projects.get(project_id)
+        if project_id in _BUILTIN_PROJECT_IDS:
+            raise HTTPException(status_code=403, detail="内置展示项目不可删除")
         if not project or project.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="项目不存在")
         del _demo_projects[project_id]
@@ -823,7 +826,7 @@ async def list_projects(
         return {
             "projects": [
                 p for p in _demo_projects.values()
-                if p.get("user_id") == user_id
+                if p.get("id") in _BUILTIN_PROJECT_IDS or p.get("user_id") == user_id
             ]
         }
 

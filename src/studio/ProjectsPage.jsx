@@ -42,6 +42,11 @@ const MOCK_PROJECTS = [
   DEMO_PROJECTS['demo-proj-002'],
 ]
 
+const BUNDLED_PROJECTS = {
+  [FUHUA_PROJECT.id]: FUHUA_PROJECT,
+  ...DEMO_PROJECTS,
+}
+
 const STATUS_MAP = {
   draft: { label: '草稿', color: 'text-white/30 bg-white/[0.04]' },
   in_progress: { label: '创作中', color: 'text-prophet bg-prophet/10' },
@@ -245,8 +250,7 @@ export default function ProjectsPage() {
           const data = await workspaceApi.getProjects()
           const list = data.projects || []
           const apiProjects = list.map(p => {
-            if (ENABLE_DEMO_DATA && DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
-            if (ENABLE_DEMO_DATA && p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
+            if (BUNDLED_PROJECTS[p.id]) return BUNDLED_PROJECTS[p.id]
             return {
               id: p.id,
               title: p.title,
@@ -266,12 +270,9 @@ export default function ProjectsPage() {
               },
             }
           })
-          if (ENABLE_DEMO_DATA) {
-            const demoList = [FUHUA_PROJECT, ...Object.values(DEMO_PROJECTS)]
-            for (const demo of demoList) {
-              if (!apiProjects.some(p => p.id === demo.id)) {
-                apiProjects.unshift(demo)
-              }
+          for (const demo of Object.values(BUNDLED_PROJECTS).reverse()) {
+            if (!apiProjects.some(p => p.id === demo.id)) {
+              apiProjects.unshift(demo)
             }
           }
           setProjects(apiProjects)
