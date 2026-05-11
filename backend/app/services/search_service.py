@@ -19,7 +19,8 @@ class SearchService:
     async def connect(self):
         """连接 ES"""
         if not self.client:
-            self.client = AsyncElasticsearch([settings.ES_URL])
+            es_url = settings.ELASTICSEARCH_URL or settings.ES_URL
+            self.client = AsyncElasticsearch([es_url])
 
     async def close(self):
         """关闭连接"""
@@ -56,7 +57,7 @@ class SearchService:
                     }
                 },
                 "size": limit,
-                "sort": [{"engagement.likes": "desc"}]
+                "sort": [{"engagement_score": "desc"}]
             }
 
             result = await self.client.search(
@@ -73,9 +74,7 @@ class SearchService:
             return "\n".join(texts) if texts else ""
 
         except Exception as e:
-            # ES 不可用时返回空
-            print(f"ES search error: {e}")
-            return ""
+            raise RuntimeError(f"Elasticsearch search failed: {e}") from e
 
     async def get_trending_keywords(self, limit: int = 20) -> list[dict]:
         """
@@ -115,8 +114,7 @@ class SearchService:
             return keywords
 
         except Exception as e:
-            print(f"ES aggregation error: {e}")
-            return []
+            raise RuntimeError(f"Elasticsearch aggregation failed: {e}") from e
 
     async def get_platform_stats(self) -> list[dict]:
         """
@@ -155,8 +153,7 @@ class SearchService:
             return stats
 
         except Exception as e:
-            print(f"ES stats error: {e}")
-            return []
+            raise RuntimeError(f"Elasticsearch stats failed: {e}") from e
 
     async def index_social_post(self, post: dict):
         """
@@ -164,12 +161,13 @@ class SearchService:
         """
         try:
             await self.connect()
+            body = post.to_es_doc() if hasattr(post, "to_es_doc") else post
             await self.client.index(
                 index=f"{self.index_prefix}_social",
-                body=post
+                body=body
             )
         except Exception as e:
-            print(f"ES index error: {e}")
+            raise RuntimeError(f"Elasticsearch index failed: {e}") from e
 
 
 # 全局单例

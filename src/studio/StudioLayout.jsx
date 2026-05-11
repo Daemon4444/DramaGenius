@@ -11,6 +11,7 @@ const PROJECT_TITLES = {
   'demo-proj-002': '数字芯尘：意识觉醒',
   'proj-fuhua': '浮华陷阱',
 }
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const STEP_COMPLETION = {
   'demo-proj-001': ['overview', 'prophet', 'soul', 'arbiter'],
@@ -59,7 +60,7 @@ function Toast({ message, onDone }) {
    ───────────────────────────────────────────── */
 
 function ProgressBar({ projectId, collapsed }) {
-  const completed = STEP_COMPLETION[projectId] || []
+  const completed = ENABLE_DEMO_DATA ? (STEP_COMPLETION[projectId] || []) : []
   const total = NAV_ITEMS.length
   const count = completed.length
   const pct = Math.round((count / total) * 100)

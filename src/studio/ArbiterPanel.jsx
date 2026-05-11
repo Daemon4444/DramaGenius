@@ -5,6 +5,7 @@ import ImmersiveBranch from '../components/ImmersiveBranch'
 import StepNav from './StepNav'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const CHOICE_COLORS = { A: '#22d3ee', B: '#f59e0b', C: '#fb7185', D: '#a78bfa' }
 const choiceColor = (id) => CHOICE_COLORS[id] || '#94a3b8'
@@ -76,7 +77,7 @@ function BranchTree({ history }) {
 export default function ArbiterPanel() {
   const { projectId } = useParams()
   const [scene, setScene] = useState('')
-  const [decisions, setDecisions] = useState(() => projectId === 'demo-proj-002' ? DEMO_DECISIONS : [])
+  const [decisions, setDecisions] = useState(() => ENABLE_DEMO_DATA && projectId === 'demo-proj-002' ? DEMO_DECISIONS : [])
   const [generating, setGenerating] = useState(false)
   const [selected, setSelected] = useState(null) // { decisionId, choiceId }
   const [simulating, setSimulating] = useState(false)
@@ -98,9 +99,11 @@ export default function ArbiterPanel() {
       if (USE_REAL_API) {
         const data = await arbiterApi.generateScenario(scene)
         setDecisions(data.decisions || [])
-      } else {
+      } else if (ENABLE_DEMO_DATA) {
         await new Promise(r => setTimeout(r, 1400))
         setDecisions(DEMO_DECISIONS)
+      } else {
+        throw new Error('未启用真实 API，且演示数据已关闭')
       }
       setScene('')
     } catch (err) { console.error('场景生成失败:', err) }
@@ -140,7 +143,7 @@ export default function ArbiterPanel() {
           },
         }
       )
-    } else {
+    } else if (ENABLE_DEMO_DATA) {
       const mockText = `选择了「${choice.label}」后，剧情发生了关键转折...\n\n林夏深吸一口气，${choice.description}。\n\n在场的所有人都震惊了。这一刻，三年的隐忍终于得到了释放。但她不知道的是，陈宇正站在角落，注视着这一切……\n\n空气仿佛凝固了三秒钟，掌声突然响起——不是赞同，而是某种复杂的敬畏。`
       let i = 0
       const timer = setInterval(() => {
@@ -152,6 +155,9 @@ export default function ArbiterPanel() {
         }
       }, 25)
       cancelRef.current = () => clearInterval(timer)
+    } else {
+      setSimulating(false)
+      setStreamText('请启用真实 API 后再进行决策推演。')
     }
   }, [selectedDecision, selectedChoiceObj])
 

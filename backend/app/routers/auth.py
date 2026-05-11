@@ -48,6 +48,8 @@ class UserResponse(BaseModel):
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """用户注册"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时认证不可用于生产验证")
         # Demo 模式：直接返回 mock token
         return create_tokens("demo-user-001")
 
@@ -73,6 +75,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     """用户登录"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时认证不可用于生产验证")
         # Demo 模式：任意账密可登录
         return create_tokens("demo-user-001")
 
@@ -104,6 +108,8 @@ async def get_me(
 ):
     """获取当前用户信息"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时用户信息不可用于生产验证")
         return UserResponse(
             id=user_id or "demo-user-001",
             email="demo@example.com",

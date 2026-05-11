@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # ── 开发模式 ──
     DEV_SKIP_DB: bool = False  # 跳过数据库连接（轻量测试）
     ENVIRONMENT: str = "development"
+    ALLOW_DEMO_DATA: bool = False  # 仅本地演示显式开启；生产默认不回退 mock/demo 数据
 
     # ── Database (PostgreSQL) ──
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/dramagenius"
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
 
     # ── Elasticsearch ──
     ES_URL: str = "http://localhost:9200"
+    ELASTICSEARCH_URL: str = ""  # docker/deploy 别名；设置后优先使用
     ES_INDEX_PREFIX: str = "dramagenius"
 
     # ── DashScope (通义千问) ──
@@ -55,7 +57,10 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""
     OSS_BUCKET: str = "dramagenius"
+    OSS_BUCKET_NAME: str = ""  # 兼容旧 env 名；设置后优先使用
     OSS_ENDPOINT: str = "oss-cn-beijing.aliyuncs.com"
+    OSS_PUBLIC_BASE_URL: str = ""  # 可选 CDN/自定义域名，例如 https://media.example.com
+    OSS_UPLOAD_PREFIX: str = "dramagenius"
 
     # ── JWT ──
     JWT_SECRET: str = "jwt-secret-change-in-production"
@@ -82,7 +87,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache()

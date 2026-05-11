@@ -40,8 +40,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(true);
       return data;
     } catch (e) {
-      // Demo 模式下 API 不可用时，使用模拟用户
-      if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      if (import.meta.env.VITE_USE_REAL_API !== 'true' && import.meta.env.VITE_ENABLE_DEMO_DATA === 'true') {
         const mockUser = { email, name: email.split('@')[0] || 'Demo User' };
         setUser(mockUser);
         setIsAuthenticated(true);

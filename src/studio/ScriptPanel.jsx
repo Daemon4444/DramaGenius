@@ -3,6 +3,7 @@ import { streamRequest, continueScriptStream } from '../services/api'
 import StepNav from './StepNav'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 // ── Demo data ──────────────────────────────────────────────
 const DEMO_SCRIPTS = {
@@ -70,10 +71,10 @@ function countStats(text) {
 // ── Component ──────────────────────────────────────────────
 export default function ScriptPanel() {
   const [concept, setConcept] = useState('')
-  const [episodes, setEpisodes] = useState(DEMO_EPISODES)
+  const [episodes, setEpisodes] = useState(() => ENABLE_DEMO_DATA ? DEMO_EPISODES : [])
   const [activeEp, setActiveEp] = useState(0)
   const [generating, setGenerating] = useState(false)
-  const [streamText, setStreamText] = useState(DEMO_SCRIPTS['ep-1'] || '')
+  const [streamText, setStreamText] = useState(() => ENABLE_DEMO_DATA ? (DEMO_SCRIPTS['ep-1'] || '') : '')
   const [stageInfo, setStageInfo] = useState({ current: '', label: '' })
   const [showNewInput, setShowNewInput] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -106,7 +107,7 @@ export default function ScriptPanel() {
     if (ep) {
       // Restore from cache first, fallback to demo data
       const cached = episodeCache.current[ep.id]
-      setStreamText(cached !== undefined ? cached : (DEMO_SCRIPTS[ep.id] || ''))
+      setStreamText(cached !== undefined ? cached : (ENABLE_DEMO_DATA ? (DEMO_SCRIPTS[ep.id] || '') : ''))
     }
   }, [episodes, activeEp, streamText])
 
@@ -165,7 +166,7 @@ export default function ScriptPanel() {
         onError: (err) => { console.error('生成失败:', err); setGenerating(false); setStageInfo({ current: '', label: '' }) },
         onComplete: () => { setGenerating(false); setStageInfo({ current: '', label: '' }); cancelRef.current = null },
       })
-    } else {
+    } else if (ENABLE_DEMO_DATA) {
       // ── Mock streaming ──
       const mockScript = DEMO_SCRIPTS['ep-1']
       const stages = Object.values(STAGES_LABELS)
@@ -175,6 +176,9 @@ export default function ScriptPanel() {
         if (i < mockScript.length) { setStreamText(prev => prev + mockScript.slice(i, i + 4)); i += 4 }
         else { clearInterval(timer); setGenerating(false); setStageInfo({ current: '', label: '' }); setEpisodes(DEMO_EPISODES) }
       }, 12)
+    } else {
+      setGenerating(false)
+      setStageInfo({ current: '', label: '' })
     }
   }, [concept])
 

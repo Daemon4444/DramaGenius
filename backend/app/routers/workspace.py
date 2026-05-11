@@ -27,6 +27,10 @@ from app.config import get_settings
 router = APIRouter()
 settings = get_settings()
 
+
+def _demo_enabled() -> bool:
+    return bool(settings.DEV_SKIP_DB and settings.ALLOW_DEMO_DATA)
+
 # Demo 模式下的内存存储 — 预填充默认项目（user_id 用通配 "demo"）
 _DEMO_USER = "demo"
 _demo_projects = {
@@ -387,8 +391,8 @@ async def generate_plan(
                     json_str = prophet_result.split("```json")[1].split("```")[0].strip()
                     data = json.loads(json_str)
                     keywords = [k.get("word", "") for k in data.get("keywords", [])[:5]]
-            except:
-                keywords = ["职场", "复仇", "逆袭"]
+            except Exception:
+                raise RuntimeError("Prophet 阶段返回内容不是合法 JSON")
 
             yield format_sse({
                 "stage": "prophet",
@@ -409,8 +413,8 @@ async def generate_plan(
                     json_str = soul_result.split("```json")[1].split("```")[0].strip()
                     data = json.loads(json_str)
                     characters = data.get("characters", [])
-            except:
-                characters = [{"name": "主角", "role": "protagonist"}]
+            except Exception:
+                raise RuntimeError("Soul 阶段返回内容不是合法 JSON")
 
             char_names = [c.get("name", "角色") for c in characters[:4]]
             yield format_sse({
@@ -434,8 +438,8 @@ async def generate_plan(
                     data = json.loads(json_str)
                     decisions = data.get("decisions", [])
                     monetization = data.get("monetization", {})
-            except:
-                decisions = [{"description": "关键决策点", "dramatic_weight": 80}]
+            except Exception:
+                raise RuntimeError("Arbiter 阶段返回内容不是合法 JSON")
 
             yield format_sse({
                 "stage": "arbiter",
@@ -460,11 +464,8 @@ async def generate_plan(
                 if "```json" in outline_result:
                     json_str = outline_result.split("```json")[1].split("```")[0].strip()
                     outline = json.loads(json_str)
-            except:
-                outline = {
-                    "title": "未命名短剧",
-                    "episodes": [{"ep_number": i, "title": f"第{i}集"} for i in range(1, 7)]
-                }
+            except Exception:
+                raise RuntimeError("Outline 阶段返回内容不是合法 JSON")
 
             yield format_sse({
                 "stage": "outline",
@@ -509,6 +510,9 @@ async def continue_script(
     前端收到的是逐字流式文本，可以实现打字机效果
     """
     try:
+        if settings.DEV_SKIP_DB and not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时续写不可用于生产验证")
+
         # Demo 模式：跳过数据库查询，直接走 LLM 续写
         if not settings.DEV_SKIP_DB:
             # 验证项目所有权
@@ -562,6 +566,8 @@ async def create_project(
 ):
     """创建新项目"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目创建不可用于生产验证")
         # Demo 模式：内存存储
         proj_id = str(uuid.uuid4())
         _demo_projects[proj_id] = {
@@ -612,6 +618,8 @@ async def get_project(
 ):
     """获取项目详情"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目详情不可用于生产验证")
         proj = _demo_projects.get(project_id)
         if not proj:
             raise HTTPException(status_code=404, detail="项目不存在")
@@ -651,6 +659,8 @@ async def delete_project(
 ):
     """删除项目"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目删除不可用于生产验证")
         if project_id not in _demo_projects:
             raise HTTPException(status_code=404, detail="项目不存在")
         del _demo_projects[project_id]
@@ -679,6 +689,8 @@ async def save_scene(
         raise HTTPException(status_code=400, detail="场景内容不能为空")
 
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时场景保存不可用于生产验证")
         scene_id = str(uuid.uuid4())
         scene = {
             "id": scene_id,
@@ -737,6 +749,8 @@ async def list_projects(
 ):
     """列出用户的所有项目"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时项目列表不可用于生产验证")
         # Demo 模式：返回内存中的所有项目
         return {"projects": list(_demo_projects.values())}
 
@@ -771,6 +785,8 @@ async def export_project(
     export_format = _normalize_export_format(req.format)
 
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时导出不可用于生产验证")
         project = _demo_projects.get(req.project_id)
         if not project:
             raise HTTPException(status_code=404, detail="项目不存在")

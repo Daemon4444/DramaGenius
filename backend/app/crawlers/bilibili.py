@@ -69,6 +69,15 @@ class BilibiliCrawler(BaseCrawler):
                 await asyncio.sleep(1)
         
         return posts[:limit]
+
+    async def crawl_trending(self, limit: int = 50) -> list[SocialPost]:
+        return await self.crawl(keyword=None, limit=limit)
+
+    async def search(self, keyword: str, limit: int = 100) -> list[SocialPost]:
+        return await self.crawl(keyword=keyword, limit=limit)
+
+    async def crawl_topic(self, topic_id: str, limit: int = 100) -> list[SocialPost]:
+        return await self.search(topic_id, limit=limit)
     
     async def _search_videos(self, client: httpx.AsyncClient, keyword: str, limit: int) -> list[dict]:
         """搜索视频"""
@@ -189,6 +198,9 @@ async def crawl_bilibili_drama(keyword: Optional[str] = None, limit: int = 50):
         await search_service.index_social_post(post)
     
     return {"platform": "bilibili", "count": len(posts)}
+
+
+bilibili_crawler = BilibiliCrawler()
 
 
 if __name__ == "__main__":

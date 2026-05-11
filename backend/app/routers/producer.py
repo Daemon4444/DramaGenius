@@ -4,6 +4,7 @@ Producer 视频制片路由
 """
 import json
 import os
+import time
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
@@ -29,6 +30,10 @@ settings = get_settings()
 MOCK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "mock_assets")
 
 
+def _demo_enabled() -> bool:
+    return bool(settings.DEV_SKIP_DB and settings.ALLOW_DEMO_DATA)
+
+
 # ==============================
 # 热点雷达 API
 # ==============================
@@ -48,11 +53,13 @@ async def get_hotspots(
     """
     获取热点数据
 
-    - 不传 project_id 返回内置 Demo 数据
+    - 生产模式必须传 project_id
     - 传 project_id 返回项目的热点数据
     - 传 episode_key 按集筛选
     """
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return _get_demo_hotspots(episode_key)
 
     query = select(Hotspot).where(Hotspot.project_id == project_id)
@@ -62,7 +69,7 @@ async def get_hotspots(
     hotspots = result.scalars().all()
 
     if not hotspots:
-        return _get_demo_hotspots(episode_key)
+        return {"label": "", "items": []} if episode_key else {}
 
     grouped = {}
     for h in hotspots:
@@ -102,6 +109,8 @@ async def generate_hotspots(
 ):
     """AI 生成指定集的热点数据"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时 Producer 生成不可用于生产验证")
         return {"episode_key": req.episode_key, "items": [
             {"title": "AI 生成热点示例", "source": "demo", "heat": 85, "trend": "rising"}
         ]}
@@ -142,9 +151,11 @@ async def get_scripts(
     """
     获取所有视频剧本
 
-    不传 project_id 返回内置 Demo 剧本
+    生产模式必须传 project_id
     """
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return _get_demo_scripts()
 
     result = await db.execute(
@@ -155,7 +166,7 @@ async def get_scripts(
     scripts = result.scalars().all()
 
     if not scripts:
-        return _get_demo_scripts()
+        return []
 
     return [
         {
@@ -180,6 +191,8 @@ async def get_script_by_id(
 ):
     """获取单个剧本"""
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         demos = _get_demo_scripts()
         script = next((s for s in demos if s["id"] == script_id), None)
         if script:
@@ -220,6 +233,8 @@ async def generate_scripts(
     结合热点数据 + 观众投票结果，生成 A/B 两个分支的分镜脚本
     """
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时剧本生成不可用于生产验证")
         return {"message": "剧本生成功能需要数据库支持", "scripts": []}
     try:
         scripts = await producer_service.generate_scripts(
@@ -228,8 +243,7 @@ async def generate_scripts(
         )
 
         if not scripts:
-            # 返回 Demo 生成模板
-            return _get_demo_generated_scripts(req.episode_num)
+            raise HTTPException(status_code=502, detail="AI 未返回可保存的剧本分支")
 
         return {
             "scriptA": scripts.get("scriptA"),
@@ -255,6 +269,8 @@ async def parse_script(
     接收原始分镜文稿文本，通过 AI 解析为标准 JSON 格式
     """
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时剧本解析不可用于生产验证")
         return {"message": "剧本解析功能需要数据库支持", "scenes": []}
     try:
         result = await producer_service.parse_script_from_text(
@@ -289,6 +305,8 @@ async def get_interactions(
 ):
     """获取所有互动数据"""
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return _get_demo_interactions()
 
     result = await db.execute(
@@ -299,7 +317,7 @@ async def get_interactions(
     interactions = result.scalars().all()
 
     if not interactions:
-        return _get_demo_interactions()
+        return {}
 
     data = {}
     for inter in interactions:
@@ -316,6 +334,8 @@ async def get_interaction(
 ):
     """获取指定集的互动数据"""
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         demos = _get_demo_interactions()
         return demos.get(episode_key, {})
 
@@ -328,8 +348,7 @@ async def get_interaction(
     )
     interaction = result.scalar_one_or_none()
     if not interaction:
-        demos = _get_demo_interactions()
-        return demos.get(episode_key, {})
+        return {}
 
     return _serialize_interaction(interaction)
 
@@ -344,11 +363,9 @@ async def vote(
     if req.choice not in ("A", "B"):
         raise HTTPException(status_code=400, detail="choice 必须为 A 或 B")
 
-    if req.interaction_id:
-        result = await producer_service.cast_vote(db, req.interaction_id, req.choice, user_id)
-    else:
-        # Demo 模式，直接返回成功
-        result = {"success": True, "choice": req.choice}
+    if not req.interaction_id:
+        raise HTTPException(status_code=400, detail="生产模式必须提供 interaction_id")
+    result = await producer_service.cast_vote(db, req.interaction_id, req.choice, user_id)
 
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "投票失败"))
@@ -362,6 +379,8 @@ async def add_comment(
 ):
     """添加弹幕评论"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时评论不可用于生产验证")
         import uuid
         return {"id": str(uuid.uuid4()), "user_name": req.user_name, "text": req.text}
     try:
@@ -390,6 +409,8 @@ async def get_produce_data(
 ):
     """获取成片页面数据（可用剧本、风格、配音、BGM 选项）"""
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return _get_demo_produce_data()
 
     # 查询项目的视频剧本
@@ -407,7 +428,12 @@ async def get_produce_data(
     productions = {str(p.script_id): p for p in prod_result.scalars().all()}
 
     if not scripts:
-        return _get_demo_produce_data()
+        return {
+            "scripts": [],
+            "styles": ["赛博朋克", "暗黑哥特", "极简未来", "胶片质感"],
+            "voices": ["AI-沉稳男声", "AI-温柔女声", "AI-机械合成", "无旁白"],
+            "bgm": ["Ambient Dystopia", "Neon Rain", "Digital Lullaby", "Silence"],
+        }
 
     script_list = []
     for s in scripts:
@@ -447,8 +473,8 @@ async def start_produce(
     4. render - 最终渲染
     """
     if not req.project_id:
-        # Demo 模式
-        import time
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return {
             "taskId": f"demo_task_{int(time.time() * 1000)}",
             "scriptId": req.script_id,
@@ -469,7 +495,7 @@ async def start_produce(
 
     try:
         prod = await producer_service.start_production(
-            db, req.project_id, str(script.id),
+            db, req.project_id, script,
             req.style, req.voice, req.bgm
         )
         return {
@@ -483,35 +509,46 @@ async def start_produce(
 
 
 @router.get("/produce/progress/{task_id}")
-async def get_produce_progress(task_id: str):
+async def get_produce_progress(task_id: str, db: AsyncSession = Depends(get_db)):
     """
     获取制作进度 (SSE 流式)
 
     前端通过 EventSource 订阅此接口
     """
     async def progress_stream():
-        steps = [
-            ("parse", "解析分镜脚本", 25),
-            ("frames", "生成画面帧", 50),
-            ("audio", "合成配音音效", 75),
-            ("render", "最终渲染合成", 100),
-        ]
         import asyncio
-        for step, label, progress in steps:
-            yield format_sse({
-                "taskId": task_id,
-                "step": step,
-                "label": label,
-                "progress": progress,
-            }, "progress")
-            await asyncio.sleep(2)  # 模拟每步耗时
+        if task_id.startswith("demo_task_"):
+            if not _demo_enabled():
+                yield format_sse({"taskId": task_id, "error": "生产模式不支持 demo 任务"}, "error")
+                return
+            yield format_sse({"taskId": task_id, "status": "done", "progress": 100}, "done")
+            return
 
-        yield format_sse({
-            "taskId": task_id,
-            "status": "done",
-            "videoUrl": f"/api/producer/videos/{task_id}",
-            "progress": 100,
-        }, "done")
+        from app.services.video_service import video_service
+        status_progress = {
+            "PENDING": 10,
+            "RUNNING": 50,
+            "SUCCEEDED": 100,
+            "FAILED": 100,
+        }
+        for _ in range(120):
+            status = await video_service.check_status(task_id)
+            progress = status_progress.get(status.get("status"), 25)
+            yield format_sse({"taskId": task_id, "progress": progress, **status}, "progress")
+            await producer_service.update_production_by_task(
+                db,
+                task_id,
+                status=status.get("status", "UNKNOWN"),
+                progress=progress,
+                video_url=status.get("video_url"),
+                message=status.get("message"),
+            )
+            if status.get("status") in {"SUCCEEDED", "FAILED"}:
+                yield format_sse({"taskId": task_id, "progress": progress, **status}, "done")
+                return
+            await asyncio.sleep(5)
+
+        yield format_sse({"taskId": task_id, "status": "TIMEOUT", "progress": 95}, "error")
 
     return StreamingResponse(
         progress_stream(),
@@ -535,6 +572,8 @@ async def get_storyline(
 ):
     """获取分支图谱"""
     if not project_id:
+        if not _demo_enabled():
+            raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
         return _get_demo_storyline()
 
     nodes_result = await db.execute(
@@ -548,7 +587,7 @@ async def get_storyline(
     edges = edges_result.scalars().all()
 
     if not nodes:
-        return _get_demo_storyline()
+        return {"nodes": [], "edges": []}
 
     return {
         "nodes": [
@@ -578,7 +617,9 @@ async def get_storyline(
 
 @router.get("/videos/{video_name}")
 async def serve_video(video_name: str):
-    """提供 Mock 视频文件下载/流式播放"""
+    """提供本地演示视频文件下载/流式播放"""
+    if not _demo_enabled():
+        raise HTTPException(status_code=404, detail="生产模式不提供 mock_assets 视频")
     video_dir = os.path.join(MOCK_DIR, "videos")
     video_path = os.path.join(video_dir, video_name)
 

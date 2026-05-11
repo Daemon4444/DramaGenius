@@ -94,6 +94,54 @@ async def health_check():
     }
 
 
+@app.get("/ready")
+async def readiness_check():
+    """Production dependency readiness: database, Redis, and Elasticsearch."""
+    checks = {}
+
+    if settings.DEV_SKIP_DB:
+        checks["database"] = "disabled"
+    else:
+        try:
+            from sqlalchemy import text
+            from app.models.database import async_session
+            async with async_session() as session:
+                await session.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+        except Exception as exc:
+            checks["database"] = f"failed: {exc}"
+
+    try:
+        import redis.asyncio as redis
+        client = redis.from_url(settings.REDIS_URL)
+        await client.ping()
+        await client.aclose()
+        checks["redis"] = "ok"
+    except Exception as exc:
+        checks["redis"] = f"failed: {exc}"
+
+    try:
+        from app.services.search_service import search_service
+        await search_service.connect()
+        health = await search_service.client.cluster.health()
+        checks["elasticsearch"] = health.get("status", "ok")
+    except Exception as exc:
+        checks["elasticsearch"] = f"failed: {exc}"
+        try:
+            await search_service.close()
+            search_service.client = None
+        except Exception:
+            pass
+
+    ready = all(value in {"ok", "green", "yellow"} for value in checks.values())
+    return {
+        "status": "ready" if ready else "not_ready",
+        "checks": checks,
+        "demo_data_enabled": settings.ALLOW_DEMO_DATA,
+        "dev_skip_db": settings.DEV_SKIP_DB,
+    }
+
+
 # ── 前端静态文件托管（生产模式） ──
 # 将构建好的前端 dist/ 作为静态文件服务，SPA fallback 到 index.html
 DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "dist")

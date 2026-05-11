@@ -1,6 +1,9 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import StepNav from './StepNav'
+import { workspaceApi } from '../services/api'
+
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 // ── Mock project data keyed by projectId ──
 const PROJECT_DATA = {
@@ -268,8 +271,45 @@ function StatusBadge({ status, label }) {
 export default function OverviewPanel() {
   const { projectId } = useParams()
   const navigate = useNavigate()
+  const [apiProject, setApiProject] = useState(null)
 
-  const project = PROJECT_DATA[projectId] || DEFAULT_PROJECT
+  useEffect(() => {
+    let alive = true
+    workspaceApi.getProject(projectId)
+      .then(data => {
+        if (!alive) return
+        const episodes = data.episodes || []
+        const characters = data.characters || []
+        setApiProject({
+          title: data.title || '未命名项目',
+          concept: data.concept || data.genre || '新建短剧项目',
+          status: data.status || 'draft',
+          statusLabel: data.status === 'completed' ? '已完成' : data.status === 'in_progress' ? '创作中' : '草稿',
+          createdAt: data.created_at?.split('T')[0] || '',
+          stats: {
+            heat: '—',
+            characters: characters.length,
+            episodes: episodes.length,
+            clips: 0,
+          },
+          completedSteps: [
+            data.outline ? 'prophet' : null,
+            characters.length ? 'soul' : null,
+            episodes.length ? 'script' : null,
+          ].filter(Boolean),
+          activeStep: 'prophet',
+          activities: [
+            { text: '已从真实项目数据加载概览', time: '刚刚', color: 'default' },
+          ],
+        })
+      })
+      .catch(() => {
+        if (alive) setApiProject(null)
+      })
+    return () => { alive = false }
+  }, [projectId])
+
+  const project = apiProject || (ENABLE_DEMO_DATA ? PROJECT_DATA[projectId] : null) || DEFAULT_PROJECT
   const completedSet = new Set(project.completedSteps)
   const completedCount = project.completedSteps.length
   const progressPct = Math.round((completedCount / PIPELINE_STEPS.length) * 100)

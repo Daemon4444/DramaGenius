@@ -14,11 +14,22 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://drama:drama123@postgres:5432/dramagenius
+      - DATABASE_SYNC_URL=postgresql+psycopg2://drama:drama123@postgres:5432/dramagenius
       - REDIS_URL=redis://redis:6379/0
+      - ES_URL=http://elasticsearch:9200
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - COSYVOICE_API_KEY=${COSYVOICE_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:-dramagenius-dev-secret-key-2026}
       - ENVIRONMENT=development
+      - DEV_SKIP_DB=false
+      - ALLOW_DEMO_DATA=false
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID:-}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}
+      - OSS_BUCKET=${OSS_BUCKET:-dramagenius}
+      - OSS_BUCKET_NAME=${OSS_BUCKET_NAME:-}
+      - OSS_ENDPOINT=${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+      - OSS_PUBLIC_BASE_URL=${OSS_PUBLIC_BASE_URL:-}
     volumes:
       - ./app:/app/app:ro  # 热重载开发代码
     depends_on:
@@ -41,9 +52,13 @@ services:
     container_name: dramagenius-celery
     environment:
       - DATABASE_URL=postgresql+asyncpg://drama:drama123@postgres:5432/dramagenius
+      - DATABASE_SYNC_URL=postgresql+psycopg2://drama:drama123@postgres:5432/dramagenius
       - REDIS_URL=redis://redis:6379/0
+      - ES_URL=http://elasticsearch:9200
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - DEV_SKIP_DB=false
+      - ALLOW_DEMO_DATA=false
     depends_on:
       - redis
       - postgres
@@ -62,6 +77,8 @@ services:
     container_name: dramagenius-beat
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
     depends_on:
       - redis
       - celery-worker

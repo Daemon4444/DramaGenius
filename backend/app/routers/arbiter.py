@@ -97,22 +97,8 @@ async def generate_scenario(req: GenerateScenarioRequest):
                 opt.setdefault("impact", "")
                 opt.setdefault("metrics", {"drama": 70, "satisfaction": 70})
         return {"decisions": decisions}
-    except json.JSONDecodeError:
-        # 返回默认场景
-        return {
-            "decisions": [
-                {
-                    "id": "d1",
-                    "scene": "主角在关键时刻面临重要抉择",
-                    "question": "该如何行动？",
-                    "choices": [
-                        {"id": "A", "label": "勇敢面对", "description": "直面挑战", "impact": "高风险高回报", "metrics": {"drama": 90, "satisfaction": 75}},
-                        {"id": "B", "label": "谨慎行事", "description": "等待时机", "impact": "稳健推进", "metrics": {"drama": 60, "satisfaction": 80}},
-                        {"id": "C", "label": "寻求帮助", "description": "求助他人", "impact": "合作共赢", "metrics": {"drama": 70, "satisfaction": 85}},
-                    ],
-                }
-            ]
-        }
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="互动场景生成结果不是合法 JSON") from exc
 
 
 @router.post("/design")
@@ -132,6 +118,8 @@ async def design_decisions(
     """
     try:
         if settings.DEV_SKIP_DB:
+            if not settings.ALLOW_DEMO_DATA:
+                raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时决策设计不可用于生产验证")
             # Demo 模式：跳过 DB 验证，直接调用 LLM
             result_str = await qwen_service.design_decisions(req.outline)
             try:
@@ -142,8 +130,8 @@ async def design_decisions(
                 else:
                     json_str = result_str
                 data = json.loads(json_str)
-            except json.JSONDecodeError:
-                data = {"decisions": [], "monetization": {}}
+            except json.JSONDecodeError as exc:
+                raise HTTPException(status_code=502, detail="决策设计结果不是合法 JSON") from exc
             return {
                 "decisions": data.get("decisions", []),
                 "monetization": data.get("monetization", {}),
@@ -170,33 +158,8 @@ async def design_decisions(
             else:
                 json_str = result_str
             data = json.loads(json_str)
-        except json.JSONDecodeError:
-            # 返回模拟数据
-            data = {
-                "decisions": [
-                    {
-                        "episode": 1,
-                        "scene": "高管会议上被公开羞辱",
-                        "description": "面对上司的无端指责，你会如何回应？",
-                        "options": [
-                            {"label": "隐忍不发", "description": "先忍下这口气", "consequence_preview": "为后续反击积蓄力量", "story_impact": "medium", "is_premium": False},
-                            {"label": "当场反驳", "description": "拿出证据反驳", "consequence_preview": "直接对抗升级", "story_impact": "high", "is_premium": False}
-                        ],
-                        "unlock_condition": "free",
-                        "dramatic_weight": 85
-                    }
-                ],
-                "monetization": {
-                    "free_episodes": 2,
-                    "premium_branch_count": 4,
-                    "estimated_arpu": "8-15元",
-                    "strategy": "前2集免费引流，关键决策付费解锁",
-                    "pricing": [{"item": "单次解锁", "price": "6元", "description": "解锁单个付费选项"}]
-                },
-                "engagement_hooks": [
-                    {"episode": 1, "hook_type": "cliffhanger", "description": "结尾发现内奸线索"}
-                ]
-            }
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=502, detail="决策设计结果不是合法 JSON") from exc
 
         # 保存决策点到数据库
         decisions_data = data.get("decisions", [])
@@ -245,6 +208,8 @@ async def simulate_decision(
     """
     try:
         if settings.DEV_SKIP_DB:
+            if not settings.ALLOW_DEMO_DATA:
+                raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时决策模拟不可用于生产验证")
             # Demo 模式：直接用请求参数模拟
             generator = qwen_service.simulate_decision(
                 f"场景: 决策模拟\n选择: {req.choice}", req.choice
@@ -280,6 +245,8 @@ async def get_project_decisions(
 ):
     """获取项目的所有决策点"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时决策列表不可用于生产验证")
         return {"decisions": []}
 
     result = await db.execute(

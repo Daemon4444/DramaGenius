@@ -15,6 +15,7 @@ from app.models.database import get_db
 from app.models.project import Character, Project
 from app.services.llm_service import qwen_service
 from app.services.voice_service import voice_service
+from app.services.storage_service import storage_service, StorageNotConfigured
 from app.services.prompts import PROMPT_TEMPLATES
 from app.utils.auth import get_current_user_id, get_current_user_id_optional
 from app.config import get_settings
@@ -64,7 +65,9 @@ async def generate_characters(
       - 保存角色到数据库
     """
     try:
-        is_demo = settings.DEV_SKIP_DB or not req.project_id or req.project_id == "demo-project"
+        is_demo = settings.DEV_SKIP_DB or (settings.ALLOW_DEMO_DATA and (not req.project_id or req.project_id == "demo-project"))
+        if (not req.project_id or req.project_id == "demo-project") and not is_demo:
+            raise HTTPException(status_code=400, detail="生产模式必须提供真实 project_id")
 
         # 验证项目（仅在非 demo 模式下）
         if not is_demo and user_id:
@@ -188,6 +191,8 @@ async def get_project_characters(
 ):
     """获取项目的所有角色"""
     if settings.DEV_SKIP_DB:
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时无法验证真实项目角色")
         return {"characters": []}
 
     result = await db.execute(
@@ -229,6 +234,8 @@ async def preview_voice(
     """
     # Demo 模式：直接返回 TTS 参数
     if settings.DEV_SKIP_DB or req.character_id == "demo":
+        if not settings.ALLOW_DEMO_DATA:
+            raise HTTPException(status_code=400, detail="生产模式必须提供真实 character_id")
         params = req.voice_params or {}
         return {
             "audio_url": None,
@@ -278,13 +285,7 @@ async def preview_voice(
     except HTTPException:
         raise
     except Exception as e:
-        return {
-            "audio_url": None,
-            "use_browser_tts": True,
-            "tts_params": {"lang": "zh-CN", "rate": 0.9, "pitch": 1.0, "volume": 1.0},
-            "text": req.text,
-            "message": f"语音合成服务暂不可用: {str(e)}"
-        }
+        raise HTTPException(status_code=502, detail=f"语音合成失败: {str(e)}")
 
 
 class TTSRequest(BaseModel):
@@ -364,28 +365,26 @@ async def clone_voice(
     else:
         suffix = ".mp3"
 
-    # 保存到 static/temp/（FastAPI 静态文件目录）
-    static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp")
-    os.makedirs(static_dir, exist_ok=True)
-
-    import uuid, asyncio, time
+    import uuid, asyncio
     filename = f"clone_{prefix}_{uuid.uuid4().hex[:8]}{suffix}"
-    file_path = os.path.join(static_dir, filename)
-    with open(file_path, "wb") as f:
-        f.write(audio_bytes)
+    file_path = None
+    try:
+        audio_url = await storage_service.upload_bytes(
+            audio_bytes,
+            filename=filename,
+            content_type=audio.content_type,
+            prefix="voice-clone",
+        )
+    except StorageNotConfigured:
+        if not settings.PUBLIC_HOST:
+            raise HTTPException(status_code=503, detail="声音克隆需要配置 OSS 或 PUBLIC_HOST 公网地址")
 
-    # 构建公网可访问 URL（DashScope 需要能 GET 到该文件）
-    host = settings.PUBLIC_HOST.rstrip("/")
-    if not host:
-        os.unlink(file_path)
-        return {
-            "success": False,
-            "message": "声音克隆需要配置公网地址（PUBLIC_HOST）。当前请使用预设音色。",
-            "voice_id": None,
-            "preset_voices": _PRESET_VOICES,
-        }
-
-    audio_url = f"{host}/static/temp/{filename}"
+        static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp")
+        os.makedirs(static_dir, exist_ok=True)
+        file_path = os.path.join(static_dir, filename)
+        with open(file_path, "wb") as f:
+            f.write(audio_bytes)
+        audio_url = f"{settings.PUBLIC_HOST.rstrip('/')}/static/temp/{filename}"
 
     try:
         voice_id = await voice_service.create_cloned_voice(
@@ -397,19 +396,16 @@ async def clone_voice(
         # 克隆完成后删除临时文件（延迟 30 秒，确保 DashScope 有时间读取）
         async def _cleanup():
             await asyncio.sleep(30)
-            try:
-                os.unlink(file_path)
-            except Exception:
-                pass
-        asyncio.create_task(_cleanup())
+            if file_path:
+                try:
+                    os.unlink(file_path)
+                except Exception:
+                    pass
+        if file_path:
+            asyncio.create_task(_cleanup())
 
     if not voice_id:
-        return {
-            "success": False,
-            "message": "声音克隆未完成，请确保 PUBLIC_HOST 可公网访问且音频清晰、时长 10–30 秒。当前请使用预设音色。",
-            "voice_id": None,
-            "preset_voices": _PRESET_VOICES,
-        }
+        raise HTTPException(status_code=502, detail="声音克隆未完成，请确认公网音频 URL 可访问且音频清晰、时长 10–30 秒")
 
     return {
         "success": True,
@@ -430,7 +426,4 @@ _PRESET_VOICES = [
 @router.post("/memory/query")
 async def query_character_memory(req: MemoryQueryRequest):
     """查询角色记忆 (向量检索)"""
-    return {
-        "memories": [],
-        "message": "向量检索服务待接入"
-    }
+    raise HTTPException(status_code=501, detail="角色记忆向量检索尚未接入，生产模式不会返回 mock 记忆")

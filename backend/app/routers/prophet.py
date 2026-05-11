@@ -54,9 +54,14 @@ async def analyze_trends(
             limit=100
         )
 
-        # 如果没有 ES 数据，使用千问直接生成分析（Demo 模式）
         if not raw_data:
-            raw_data = f"用户查询: {req.query}\n\n(当前为 Demo 模式，无实际采集数据，请根据你对短剧市场的了解生成分析)"
+            if settings.ALLOW_DEMO_DATA:
+                raw_data = f"用户查询: {req.query}\n\n(演示模式：无实际采集数据，请根据短剧市场常识生成分析)"
+            else:
+                raise HTTPException(
+                    status_code=424,
+                    detail="Elasticsearch 中没有可分析的真实舆情数据，请先运行爬虫采集并写入 ES"
+                )
 
         # Step 2: 调用千问分析
         result_str = await qwen_service.analyze_trends(raw_data)
@@ -71,21 +76,8 @@ async def analyze_trends(
             else:
                 json_str = result_str
             result = json.loads(json_str)
-        except json.JSONDecodeError:
-            # 如果解析失败，返回带原始维度的模拟数据（前端用公式计算指标）
-            result = {
-                "keywords": [
-                    {"word": req.query, "volume": 10000, "growth_pct": 35.0, "sentiment_score": 78, "platform_count": 3, "trend": "rising", "sources": ["抖音", "微博", "小红书"]}
-                ],
-                "trends": [
-                    {"title": f"{req.query}相关趋势", "description": "分析结果解析中...", "data_volume": 10000, "consistency": 0.7, "cross_platform": 3, "recency_days": 3}
-                ],
-                "sentiment": {"positive_count": 600, "neutral_count": 300, "negative_count": 100, "total_count": 1000, "summary": "整体正面"},
-                "suggestions": [
-                    {"type": "题材建议", "content": result_str[:200], "reason": "基于AI分析"}
-                ],
-                "hot_topics": []
-            }
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=502, detail="舆情分析结果不是合法 JSON，请重试") from exc
 
         # Step 4: 如果有 project_id，保存快照
         if req.project_id and user_id and not settings.DEV_SKIP_DB:
@@ -118,24 +110,11 @@ async def get_hot_keywords(limit: int = 20):
     """
     获取当前热门关键词 (从 ES 聚合)
     """
-    demo_keywords = [
-        {"word": "职场复仇", "score": 95, "count": 15000},
-        {"word": "霸总甜宠", "score": 92, "count": 12000},
-        {"word": "重生逆袭", "score": 88, "count": 9500},
-        {"word": "豪门恩怨", "score": 85, "count": 8000},
-        {"word": "真假千金", "score": 82, "count": 7500},
-        {"word": "契约婚姻", "score": 78, "count": 6800},
-        {"word": "身份反转", "score": 75, "count": 5900},
-        {"word": "追妻火葬场", "score": 71, "count": 5200},
-    ]
     try:
         keywords = await search_service.get_trending_keywords(limit=limit)
-        # ES 不可用时返回 demo 数据
-        if not keywords:
-            return {"keywords": demo_keywords[:limit]}
         return {"keywords": keywords}
     except Exception as e:
-        return {"keywords": demo_keywords[:limit]}
+        raise HTTPException(status_code=424, detail=f"Elasticsearch 热词聚合不可用: {str(e)}")
 
 
 @router.get("/platforms")
@@ -147,12 +126,4 @@ async def get_platform_stats():
         stats = await search_service.get_platform_stats()
         return {"platforms": stats}
     except Exception as e:
-        # 返回 Demo 数据
-        return {
-            "platforms": [
-                {"name": "微博", "posts": 45000, "last_crawl": "2026-03-31T10:00:00Z"},
-                {"name": "抖音", "posts": 32000, "last_crawl": "2026-03-31T09:30:00Z"},
-                {"name": "小红书", "posts": 28000, "last_crawl": "2026-03-31T08:00:00Z"},
-                {"name": "B站", "posts": 15000, "last_crawl": "2026-03-31T09:00:00Z"},
-            ]
-        }
+        raise HTTPException(status_code=424, detail=f"Elasticsearch 平台统计不可用: {str(e)}")

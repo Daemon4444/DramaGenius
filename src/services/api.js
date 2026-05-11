@@ -171,7 +171,7 @@ export const prophetApi = {
 
 export const soulApi = {
   async generateCharacters(projectId, concept) {
-    return api.post('/soul/generate', { project_id: projectId || 'demo-project', concept });
+    return api.post('/soul/generate', { project_id: projectId, concept });
   },
 
   async generateDialogue(characterName, personality, scene, speechStyle = '', coreDesire = '') {
@@ -186,7 +186,7 @@ export const soulApi = {
 
   async previewVoice(characterId, text, voiceParams = null) {
     return api.post('/soul/voice-preview', {
-      character_id: characterId || 'demo',
+      character_id: characterId,
       text,
       voice_params: voiceParams,
     });

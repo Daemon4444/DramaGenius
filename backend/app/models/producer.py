@@ -4,7 +4,7 @@ Producer 视频制片模型
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Text, Integer, Float, Boolean, ForeignKey, JSON
+from sqlalchemy import String, DateTime, Text, Integer, Float, Boolean, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.database import Base
@@ -32,10 +32,11 @@ class Hotspot(Base):
 # ── 视频剧本 (分镜脚本) ──
 class VideoScript(Base):
     __tablename__ = "video_scripts"
+    __table_args__ = (UniqueConstraint("project_id", "script_key", name="uq_video_scripts_project_script_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    script_key: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)  # ep1/ep2a/ep2b/ep3a/ep3b
+    script_key: Mapped[str] = mapped_column(String(20), nullable=False)  # ep1/ep2a/ep2b/ep3a/ep3b
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     episode: Mapped[int] = mapped_column(Integer, nullable=False)
     branch: Mapped[str | None] = mapped_column(String(5), nullable=True)  # A/B/null

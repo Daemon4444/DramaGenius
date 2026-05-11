@@ -4,6 +4,7 @@ import { soulApi } from '../services/api'
 import StepNav from './StepNav'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const ROLE_TEMPLATES = [
   { type: '女主', suffix: '，包含一个坚强的女主角', color: '#F472B6' },
@@ -678,7 +679,7 @@ export default function SoulPanel() {
 
   /* pre-populate demo */
   useEffect(() => {
-    if (projectId === 'demo-proj-002') {
+    if (ENABLE_DEMO_DATA && projectId === 'demo-proj-002') {
       setCharacters(DEMO_CHARACTERS)
       setRelationships(DEMO_RELATIONSHIPS)
     }
@@ -707,10 +708,12 @@ export default function SoulPanel() {
         const data = await soulApi.generateCharacters(projectId || 'demo-project', concept)
         setCharacters(data.characters || [])
         setRelationships(data.relationships || [])
-      } else {
+      } else if (ENABLE_DEMO_DATA) {
         await new Promise(r => setTimeout(r, 2200))
         setCharacters(DEMO_CHARACTERS)
         setRelationships(DEMO_RELATIONSHIPS)
+      } else {
+        throw new Error('未启用真实 API，且演示数据已关闭')
       }
     } catch (err) { console.error('生成失败:', err) }
     finally { setLoading(false); setMode('list') }
@@ -721,9 +724,14 @@ export default function SoulPanel() {
     const prev = [...characters]
     prev[idx] = { ...prev[idx], _regenerating: true }
     setCharacters(prev)
-    await new Promise(r => setTimeout(r, 1500))
-    prev[idx] = { ...DEMO_CHARACTERS[idx % DEMO_CHARACTERS.length], _regenerating: false }
-    setCharacters([...prev])
+    if (ENABLE_DEMO_DATA) {
+      await new Promise(r => setTimeout(r, 1500))
+      prev[idx] = { ...DEMO_CHARACTERS[idx % DEMO_CHARACTERS.length], _regenerating: false }
+      setCharacters([...prev])
+    } else {
+      prev[idx] = { ...prev[idx], _regenerating: false }
+      setCharacters(prev)
+    }
   }
 
   /* voice preview via TTS API (fallback to timer in demo mode) */

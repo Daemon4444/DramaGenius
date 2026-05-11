@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { workspaceApi } from '../services/api'
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 const DEMO_LANDING = { 'proj-fuhua': 'demo', 'demo-proj-002': 'demo' }
 
 // 浮华陷阱 Demo 项目（始终注入到项目列表）
@@ -235,9 +236,8 @@ export default function ProjectsPage() {
           const data = await workspaceApi.getProjects()
           const list = data.projects || []
           const apiProjects = list.map(p => {
-            // 如果 API 返回的项目匹配已知 demo 项目，使用完善的 demo 数据
-            if (DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
-            if (p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
+            if (ENABLE_DEMO_DATA && DEMO_PROJECTS[p.id]) return DEMO_PROJECTS[p.id]
+            if (ENABLE_DEMO_DATA && p.id === FUHUA_PROJECT.id) return FUHUA_PROJECT
             return {
               id: p.id,
               title: p.title,
@@ -251,21 +251,22 @@ export default function ProjectsPage() {
               stages: { prophet: false, soul: false, arbiter: false, script: false, producer: false },
             }
           })
-          // 注入 demo 项目（如 API 列表中没有）
-          const demoList = [FUHUA_PROJECT, ...Object.values(DEMO_PROJECTS)]
-          for (const demo of demoList) {
-            if (!apiProjects.some(p => p.id === demo.id)) {
-              apiProjects.unshift(demo)
+          if (ENABLE_DEMO_DATA) {
+            const demoList = [FUHUA_PROJECT, ...Object.values(DEMO_PROJECTS)]
+            for (const demo of demoList) {
+              if (!apiProjects.some(p => p.id === demo.id)) {
+                apiProjects.unshift(demo)
+              }
             }
           }
           setProjects(apiProjects)
         } else {
-          setProjects(MOCK_PROJECTS)
+          setProjects(ENABLE_DEMO_DATA ? MOCK_PROJECTS : [])
         }
       } catch (err) {
         console.error('加载项目失败:', err)
         setError('加载项目失败，请刷新重试')
-        setProjects(MOCK_PROJECTS)
+        setProjects(ENABLE_DEMO_DATA ? MOCK_PROJECTS : [])
       } finally {
         setLoading(false)
       }

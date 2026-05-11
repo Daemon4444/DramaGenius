@@ -20,7 +20,7 @@ _settings = get_settings()
 
 
 async def _safe_flush(db: AsyncSession):
-    """安全 flush：失败时 rollback 保证 session 可继续使用"""
+    """Flush DB changes and surface persistence errors in production."""
     try:
         await db.flush()
     except Exception:
@@ -28,6 +28,7 @@ async def _safe_flush(db: AsyncSession):
             await db.rollback()
         except Exception:
             pass
+        raise
 
 
 def _db_available() -> bool:
@@ -156,33 +157,42 @@ class ProducerService:
     # ── 视频制作 ──
 
     async def start_production(
-        self, db: AsyncSession, project_id: str, script_id: str,
+        self, db: AsyncSession, project_id: str, script: VideoScript,
         style: str, voice: str, bgm: str
     ) -> dict:
-        """启动视频制作任务"""
-        import time
-        task_id = f"task_{int(time.time() * 1000)}"
-        import uuid
-        prod_id = str(uuid.uuid4())
+        """提交真实 DashScope 视频任务并保存制作记录。"""
+        from app.services.video_service import video_service
 
-        if _db_available():
-            production = VideoProduction(
-                project_id=project_id,
-                script_id=script_id,
-                style=style,
-                voice=voice,
-                bgm=bgm,
-                status="producing",
-                progress=0,
-                current_step="parse",
-                task_id=task_id,
-            )
-            db.add(production)
-            await _safe_flush(db)
-            prod_id = str(production.id)
-            task_id = production.task_id
+        scene_lines = []
+        for scene in (script.scenes or [])[:8]:
+            visual = scene.get("visual") or scene.get("content") or scene.get("scene") or ""
+            audio = scene.get("audio") or scene.get("dialogue") or ""
+            if visual or audio:
+                scene_lines.append(f"画面: {visual}\n声音: {audio}".strip())
 
-        return {"id": prod_id, "task_id": task_id, "status": "producing"}
+        prompt = (
+            f"短剧视频分镜生成。标题: {script.title}\n"
+            f"风格: {style}\n配音: {voice}\nBGM: {bgm}\n"
+            f"剧情概要: {script.summary or ''}\n"
+            f"分镜:\n" + "\n---\n".join(scene_lines or [script.source_text or script.summary or script.title])
+        )
+        video_task = await video_service.submit_task(prompt=prompt)
+        task_id = video_task["task_id"]
+
+        production = VideoProduction(
+            project_id=project_id,
+            script_id=script.id,
+            style=style,
+            voice=voice,
+            bgm=bgm,
+            status="producing",
+            progress=10,
+            current_step="video_task_submitted",
+            task_id=task_id,
+        )
+        db.add(production)
+        await _safe_flush(db)
+        return {"id": str(production.id), "task_id": task_id, "status": video_task.get("status", "PENDING")}
 
     async def update_production_progress(
         self, db: AsyncSession, production_id: str, step: str, progress: int
@@ -203,6 +213,35 @@ class ProducerService:
                 await _safe_flush(db)
         except Exception:
             pass
+
+    async def update_production_by_task(
+        self,
+        db: AsyncSession,
+        task_id: str,
+        status: str,
+        progress: int,
+        video_url: str | None = None,
+        message: str | None = None,
+    ):
+        """Persist DashScope task status by task id."""
+        if not _db_available():
+            return
+        result = await db.execute(select(VideoProduction).where(VideoProduction.task_id == task_id))
+        production = result.scalar_one_or_none()
+        if not production:
+            return
+        production.progress = progress
+        production.current_step = status.lower()
+        if status == "SUCCEEDED":
+            production.status = "done"
+            production.video_url = video_url
+        elif status == "FAILED":
+            production.status = "failed"
+            if message:
+                production.current_step = f"failed: {message[:40]}"
+        else:
+            production.status = "producing"
+        await _safe_flush(db)
 
     # ── 互动 ──
 
@@ -227,8 +266,8 @@ class ProducerService:
             else:
                 interaction.option_b["votes"] = interaction.option_b.get("votes", 0) + 1
             await _safe_flush(db)
-        except Exception:
-            pass
+        except Exception as exc:
+            return {"success": False, "error": f"投票写入失败: {exc}"}
         return {"success": True, "choice": choice}
 
     async def add_comment(
@@ -244,8 +283,11 @@ class ProducerService:
             db.add(comment)
             await _safe_flush(db)
             now = comment.created_at
+            comment_id = str(comment.id)
+        else:
+            comment_id = str(__import__('uuid').uuid4())
         return {
-            "id": str(__import__('uuid').uuid4()),
+            "id": comment_id,
             "user_name": user_name,
             "text": text,
             "created_at": now.isoformat(),
