@@ -482,6 +482,41 @@ async def generate_plan(
                 "monetization": monetization,
                 "outline": outline
             }
+            if req.project_id and user_id and not settings.DEV_SKIP_DB:
+                result = await db.execute(
+                    select(Project).where(Project.id == req.project_id, Project.user_id == user_id)
+                )
+                project = result.scalar_one_or_none()
+                if project:
+                    project.outline_json = final_result
+                    project.status = "writing"
+                    if outline.get("title") and (not project.title or project.title == "新建项目"):
+                        project.title = outline["title"]
+                    if not project.characters:
+                        for char_data in characters[:8]:
+                            db.add(Character(
+                                project_id=project.id,
+                                name=char_data.get("name", "未命名"),
+                                role=char_data.get("role", "supporting"),
+                                personality=char_data.get("personality") or [],
+                                backstory=char_data.get("backstory"),
+                                motivation=char_data.get("motivation"),
+                                speech_style=char_data.get("speech_style"),
+                                appearance=char_data.get("appearance"),
+                                signature_line=char_data.get("signature_line"),
+                                arc=char_data.get("arc"),
+                            ))
+                    if not project.episodes:
+                        for idx, ep_data in enumerate(outline.get("episodes") or [], start=1):
+                            db.add(Episode(
+                                project_id=project.id,
+                                ep_number=ep_data.get("ep_number") or ep_data.get("episode") or idx,
+                                title=ep_data.get("title") or f"第{idx}集",
+                                summary=ep_data.get("summary") or ep_data.get("synopsis"),
+                                cliffhanger=ep_data.get("cliffhanger") or ep_data.get("hook"),
+                                status="draft",
+                            ))
+                    await db.commit()
             yield format_sse({"status": "all_complete", "result": final_result}, "done")
 
         except Exception as e:
@@ -645,7 +680,26 @@ async def get_project(
             for c in project.characters
         ],
         "episodes": [
-            {"id": str(e.id), "ep_number": e.ep_number, "title": e.title, "status": e.status}
+            {
+                "id": str(e.id),
+                "ep_number": e.ep_number,
+                "title": e.title,
+                "summary": e.summary,
+                "status": e.status,
+                "scenes": [
+                    {
+                        "id": str(scene.id),
+                        "order_idx": scene.order_idx,
+                        "scene_type": scene.scene_type,
+                        "character_name": scene.character_name,
+                        "content": scene.content,
+                        "mood": scene.mood,
+                        "location": scene.location,
+                        "time_of_day": scene.time_of_day,
+                    }
+                    for scene in sorted(e.scenes or [], key=lambda s: s.order_idx)
+                ],
+            }
             for e in project.episodes
         ]
     }
@@ -764,9 +818,23 @@ async def list_projects(
             {
                 "id": str(p.id),
                 "title": p.title,
+                "concept": p.concept,
                 "genre": p.genre,
                 "status": p.status,
-                "created_at": p.created_at.isoformat()
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat() if p.updated_at else p.created_at.isoformat(),
+                "outline": bool(p.outline_json),
+                "character_count": len(p.characters or []),
+                "decision_count": len(p.decisions or []),
+                "episode_count": len(p.episodes or []),
+                "word_count": sum((ep.word_count or 0) for ep in (p.episodes or [])),
+                "stages": {
+                    "prophet": bool(p.outline_json),
+                    "soul": bool(p.characters),
+                    "arbiter": bool(p.decisions),
+                    "script": bool(p.episodes),
+                    "producer": False,
+                },
             }
             for p in projects
         ]

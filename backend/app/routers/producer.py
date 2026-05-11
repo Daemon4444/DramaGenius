@@ -153,6 +153,11 @@ async def get_scripts(
 
     生产模式必须传 project_id
     """
+    if settings.DEV_SKIP_DB:
+        if not _demo_enabled():
+            raise HTTPException(status_code=503, detail="DEV_SKIP_DB=true 时视频剧本不可用于生产验证")
+        return _get_demo_scripts()
+
     if not project_id:
         if not _demo_enabled():
             raise HTTPException(status_code=400, detail="生产模式必须提供 project_id")
@@ -872,6 +877,8 @@ class VideoGenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
     model: Optional[str] = None
+    project_id: Optional[str] = None
+    shot_id: Optional[str] = None
     size: str = "720*1280"
     duration: int = 5
     seed: Optional[int] = None
@@ -892,6 +899,9 @@ async def video_generate(req: VideoGenerateRequest):
             prompt_extend=req.prompt_extend,
             seed=req.seed,
         )
+        result["model"] = video_service.normalize_model(req.model)
+        result["project_id"] = req.project_id
+        result["shot_id"] = req.shot_id
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -905,22 +915,30 @@ async def video_status(task_id: str):
     from app.services.video_service import video_service
     import httpx
     try:
+        video_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "videos")
+        os.makedirs(video_dir, exist_ok=True)
+        safe_task = "".join(ch for ch in task_id if ch.isalnum() or ch in ("-", "_"))[:120] or "video"
+        local_filename = f"{safe_task}.mp4"
+        local_path = os.path.join(video_dir, local_filename)
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            return {
+                "task_id": task_id,
+                "status": "SUCCEEDED",
+                "video_url": f"/api/producer/videos/{local_filename}",
+                "cached": True,
+            }
+
         result = await video_service.check_status(task_id)
         # 视频生成成功时，下载到本地并替换 URL
         if result.get("status") == "SUCCEEDED" and result.get("video_url"):
-            video_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static", "temp", "videos")
-            os.makedirs(video_dir, exist_ok=True)
-            local_filename = f"{task_id}.mp4"
-            local_path = os.path.join(video_dir, local_filename)
-            if not os.path.exists(local_path):
-                # 下载视频到本地
-                async with httpx.AsyncClient(timeout=120) as client:
-                    resp = await client.get(result["video_url"])
-                    if resp.status_code == 200:
-                        with open(local_path, "wb") as f:
-                            f.write(resp.content)
+            async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
+                resp = await client.get(result["video_url"])
+                resp.raise_for_status()
+                with open(local_path, "wb") as f:
+                    f.write(resp.content)
             # 返回本地代理 URL
             result["video_url"] = f"/api/producer/videos/{local_filename}"
+            result["cached"] = True
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

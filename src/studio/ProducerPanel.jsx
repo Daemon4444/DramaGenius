@@ -1,15 +1,17 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import { api } from '../services/api'
 import StepNav from './StepNav'
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
+const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const MODELS = [
-  { id: 'happyhorse-1.0-t2v', label: 'HappyHorse', desc: '720P/1080P · 有声叙事', badge: '新' },
-  { id: 'wan2.1-t2v-turbo',   label: 'WAN Turbo',  desc: '720P · 快速预览',      badge: '快' },
-  { id: 'wan2.1-t2v-plus',    label: 'WAN Plus',   desc: '720P · 高质量',        badge: '精' },
+  { id: 'happyhorse-1.0-t2v', label: 'HappyHorse 1.0', desc: '720P/1080P · 有声叙事', badge: '声' },
+  { id: 'wanx2.1-t2v-turbo',  label: 'One Turbo',       desc: 'Wanx 2.1 · 快速预览',   badge: '快' },
+  { id: 'wanx2.1-t2v-plus',   label: 'One Plus',        desc: 'Wanx 2.1 · 高质量',     badge: '精' },
 ]
 
 const SIZES = [
@@ -33,25 +35,6 @@ const STATUS_DISPLAY = {
   error:      { text: '失败',     color: 'text-red-400',    bg: 'bg-red-400/10',       dot: 'bg-red-400',      icon: '\u26A0' },
 }
 
-const SCRIPT_SHOTS = [
-  {
-    prompt: '清晨的城市天际线，金色阳光穿透薄雾洒在摩天大楼的玻璃幕墙上，镜头从远景缓缓推进，鸟群掠过画面',
-    negPrompt: '模糊, 低画质',
-  },
-  {
-    prompt: '一位穿白色衬衫的年轻创业者坐在咖啡厅窗边，手指在笔记本电脑上快速敲击，窗外是车水马龙的街景，浅景深特写',
-    negPrompt: '变形, 多余手指',
-  },
-  {
-    prompt: '团队围坐在会议桌前激烈讨论，白板上画满了流程图和便利贴，暖色调灯光，电影感中景镜头，人物表情生动',
-    negPrompt: '模糊, 畸变',
-  },
-  {
-    prompt: '产品发布会舞台上，聚光灯亮起，大屏幕显示产品 logo，观众席响起掌声，烟雾与光效交织，史诗感广角镜头',
-    negPrompt: '低画质, 水印',
-  },
-]
-
 /* ─── Helper: make a fresh shot object ──────────────────────────────── */
 
 const makeShot = (overrides = {}, globalModel = 'happyhorse-1.0-t2v', globalSize = '720*1280') => ({
@@ -66,8 +49,61 @@ const makeShot = (overrides = {}, globalModel = 'happyhorse-1.0-t2v', globalSize
   videoUrl: null,
   error: null,
   progress: 0,
+  source: 'manual',
   ...overrides,
 })
+
+const shotStorageKey = (projectId) => `dramagenius:producer-shots:${projectId || 'global'}`
+const scriptStorageKey = (projectId) => `dramagenius:script-drafts:${projectId || 'global'}`
+
+function splitScriptIntoShots(text, title = '剧本分镜') {
+  const cleaned = String(text || '').trim()
+  if (!cleaned) return []
+
+  const blocks = cleaned
+    .split(/\n(?=(?:#{2,4}\s*)?(?:分镜|镜头|场景)\s*[一二三四五六七八九十\dA-Za-z-]*[：:.\s])/g)
+    .map(s => s.trim())
+    .filter(Boolean)
+
+  const sourceBlocks = blocks.length > 1 ? blocks : cleaned.split(/\n-{3,}\n/g).map(s => s.trim()).filter(Boolean)
+  return sourceBlocks.slice(0, 12).map((block, index) => {
+    const visual =
+      block.match(/(?:画面描述|画面|视觉|场景)[:：]\s*([^\n]+)/)?.[1] ||
+      block.match(/(?:镜头|运镜)[:：]\s*([^\n]+)/)?.[1] ||
+      block.split('\n').find(line => line.trim() && !line.trim().startsWith('#')) ||
+      block
+    const audio = block.match(/(?:台词|旁白|音效|音乐|声音)[:：]\s*([^\n]+)/)?.[1]
+    const prompt = [
+      `${title} 第${index + 1}镜`,
+      visual,
+      audio ? `声音/台词：${audio}` : '',
+      '电影感构图，角色表演自然，镜头运动清晰，短剧竖屏叙事节奏',
+    ].filter(Boolean).join('，')
+    return { prompt, negPrompt: '低清晰度, 水印, 字幕错误, 人脸畸变, 多余手指', source: 'script' }
+  })
+}
+
+function normalizeScriptScenes(script) {
+  const scenes = script?.scenes || []
+  if (!Array.isArray(scenes) || scenes.length === 0) {
+    return splitScriptIntoShots(script?.source_text || script?.raw_text || script?.summary || '', script?.title || '剧本')
+  }
+
+  return scenes.slice(0, 12).map((scene, index) => {
+    const visual = scene.visual || scene.content || scene.scene || scene.description || scene.text || ''
+    const audio = scene.audio || scene.dialogue || scene.line || scene.voiceover || ''
+    return {
+      prompt: [
+        `${script.title || '剧本'} 第${index + 1}镜`,
+        visual,
+        audio ? `声音/台词：${audio}` : '',
+        '电影感构图，真实光影，短剧叙事镜头',
+      ].filter(Boolean).join('，'),
+      negPrompt: scene.negative_prompt || '低清晰度, 水印, 字幕错误, 人脸畸变, 多余手指',
+      source: 'script',
+    }
+  }).filter(s => s.prompt.trim())
+}
 
 /* ─── Icons (inline SVG) ────────────────────────────────────────────── */
 
@@ -209,15 +245,43 @@ function TimelineNode({ index, status, isLast }) {
    ═══════════════════════════════════════════════════════════════════════ */
 
 export default function ProducerPanel() {
-  const [shots, setShots] = useState([makeShot()])
+  const { projectId } = useParams()
+  const [shots, setShots] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(shotStorageKey(projectId)) || 'null')
+      if (Array.isArray(saved) && saved.length) return saved.map(s => makeShot(s, s.model, s.size))
+    } catch {}
+    return [makeShot()]
+  })
   const [globalModel, setGlobalModel] = useState('happyhorse-1.0-t2v')
   const [globalSize, setGlobalSize] = useState('720*1280')
   const [showPreview, setShowPreview] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [panelNotice, setPanelNotice] = useState('')
   const pollTimers = useRef({})
   const shotsRef = useRef(shots)
 
   // keep ref in sync for polling closures
   useEffect(() => { shotsRef.current = shots }, [shots])
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(shotStorageKey(projectId)) || 'null')
+      if (Array.isArray(saved) && saved.length) {
+        setShots(saved.map(s => makeShot(s, s.model, s.size)))
+      } else {
+        setShots([makeShot({}, globalModel, globalSize)])
+      }
+    } catch {
+      setShots([makeShot({}, globalModel, globalSize)])
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(shotStorageKey(projectId), JSON.stringify(shots))
+    } catch {}
+  }, [projectId, shots])
 
   // cleanup on unmount
   useEffect(() => {
@@ -231,6 +295,22 @@ export default function ProducerPanel() {
 
   const addShot = () => {
     setShots(prev => [...prev, makeShot({}, globalModel, globalSize)])
+  }
+
+  const applyGlobalModel = (modelId) => {
+    setGlobalModel(modelId)
+    setShots(prev => prev.map(s => (
+      ['idle', 'error'].includes(s.status)
+        ? { ...s, model: modelId }
+        : s
+    )))
+  }
+
+  const applyGlobalSize = (size) => {
+    setGlobalSize(size)
+    setShots(prev => prev.map(s => (
+      ['idle', 'error'].includes(s.status) ? { ...s, size } : s
+    )))
   }
 
   const updateShot = useCallback((id, updates) => {
@@ -248,15 +328,71 @@ export default function ProducerPanel() {
     }
   }
 
-  const importFromScript = () => {
-    const newShots = SCRIPT_SHOTS.map((s, i) =>
-      makeShot({
-        id: Date.now() + i,
-        prompt: s.prompt,
-        negPrompt: s.negPrompt || '',
-      }, globalModel, globalSize)
-    )
-    setShots(newShots)
+  const importFromScript = async () => {
+    setImporting(true)
+    setPanelNotice('')
+    try {
+      let imported = []
+
+      try {
+        const drafts = JSON.parse(localStorage.getItem(scriptStorageKey(projectId)) || 'null')
+        if (drafts?.episodes?.length) {
+          imported = drafts.episodes.flatMap(ep => splitScriptIntoShots(ep.content, ep.title))
+        }
+      } catch {}
+
+      if (USE_REAL_API && imported.length === 0 && projectId) {
+        try {
+          const data = await api.get(`/producer/scripts?project_id=${encodeURIComponent(projectId)}`)
+          const scripts = data || []
+          imported = scripts.flatMap(script => normalizeScriptScenes(script))
+        } catch {}
+      }
+
+      if (USE_REAL_API && imported.length === 0 && projectId) {
+        try {
+          const project = await api.get(`/workspace/project/${encodeURIComponent(projectId)}`)
+          imported = (project.episodes || []).flatMap(ep => {
+            if (ep.scenes?.length) {
+              return normalizeScriptScenes({
+                title: ep.title,
+                summary: ep.summary,
+                scenes: ep.scenes.map(scene => ({
+                  visual: [scene.location, scene.time_of_day, scene.mood, scene.content].filter(Boolean).join('，'),
+                  audio: scene.character_name ? `${scene.character_name}：${scene.content}` : '',
+                })),
+              })
+            }
+            const outlineScenes = ep.key_scenes || ep.scenes || []
+            return splitScriptIntoShots([ep.title, ep.summary, ...outlineScenes].filter(Boolean).join('\n'), ep.title)
+          })
+        } catch {}
+      }
+
+      if (imported.length === 0 && ENABLE_DEMO_DATA) {
+        imported = splitScriptIntoShots('场景一：角色进入关键地点，发现决定命运的线索。\n---\n场景二：角色面对选择，情绪爆发，故事转折。', '演示剧本')
+      }
+
+      if (imported.length === 0) {
+        setPanelNotice('没有找到真实剧本内容。请先在「剧本」步骤生成或编辑剧本。')
+        return
+      }
+
+      const nextShots = imported.slice(0, 12).map((s, i) =>
+        makeShot({
+          id: Date.now() + i,
+          prompt: s.prompt,
+          negPrompt: s.negPrompt || '',
+          source: s.source || 'script',
+        }, globalModel, globalSize)
+      )
+      setShots(nextShots)
+      setPanelNotice(`已从真实剧本导入 ${nextShots.length} 个分镜。`)
+    } catch (err) {
+      setPanelNotice(`导入失败：${err.message || '未知错误'}`)
+    } finally {
+      setImporting(false)
+    }
   }
 
   /* ─── API: cancel ─────────────────────────────────────────────────── */
@@ -280,6 +416,8 @@ export default function ProducerPanel() {
 
     try {
       const data = await api.post('/producer/video/generate', {
+        project_id: projectId,
+        shot_id: String(shot.id),
         prompt: shot.prompt,
         negative_prompt: shot.negPrompt || '',
         model: shot.model,
@@ -323,7 +461,7 @@ export default function ProducerPanel() {
         else if (data.status === 'SUCCEEDED') progress = 100
 
         if (data.status === 'SUCCEEDED') {
-          updateShot(shotId, { status: 'done', videoUrl: data.video_url, progress: 100 })
+          updateShot(shotId, { status: 'done', videoUrl: data.video_url, progress: 100, error: null })
           clearInterval(pollTimers.current[shotId])
           delete pollTimers.current[shotId]
         } else if (data.status === 'FAILED') {
@@ -358,6 +496,7 @@ export default function ProducerPanel() {
   const totalDuration  = shots.reduce((sum, s) => sum + (s.duration || 5), 0)
   const completedVideos = shots.filter(s => s.status === 'done' && s.videoUrl).map(s => s.videoUrl)
   const hasAnyPrompt = shots.some(s => s.prompt.trim())
+  const activeModel = useMemo(() => MODELS.find(m => m.id === globalModel) || MODELS[0], [globalModel])
 
   /* ─── Aspect ratio helper ─────────────────────────────────────────── */
 
@@ -372,20 +511,25 @@ export default function ProducerPanel() {
      ═══════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
 
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="mb-8 flex items-end justify-between">
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-display font-bold text-white/90 flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center text-sm">
+            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-cyan-400/10 border border-white/[0.08] flex items-center justify-center text-sm shadow-lg shadow-amber-500/5">
               🎬
             </span>
             视频制片
           </h2>
-          <p className="text-sm text-white/30 mt-1.5 ml-[42px]">
-            基于剧本分镜，使用 WAN 模型生成 AI 视频
+          <p className="text-sm text-white/35 mt-1.5 ml-[46px]">
+            从真实剧本提取分镜，调用 {activeModel.label} 生成可持久预览的视频片段
           </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.035] px-3 py-2">
+          <span className="text-[10px] text-white/30">当前模型</span>
+          <span className="text-xs font-medium text-cyan-200">{activeModel.label}</span>
+          <span className="text-[10px] text-white/25">{activeModel.desc}</span>
         </div>
       </div>
 
@@ -409,7 +553,7 @@ export default function ProducerPanel() {
       )}
 
       {/* ── Stats Bar ──────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 mb-6 px-4 py-3 rounded-xl bg-surface-100/50 border border-white/[0.06]">
+      <div className="flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl bg-white/[0.035] border border-white/[0.07] shadow-lg shadow-black/10">
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-white/25">分镜</span>
           <span className="text-sm font-mono font-bold text-white/60">{shots.length}</span>
@@ -439,7 +583,7 @@ export default function ProducerPanel() {
       </div>
 
       {/* ── Global Settings ────────────────────────────────────────── */}
-      <div className="flex items-center gap-4 mb-6 p-4 rounded-xl bg-surface-100/50 border border-white/[0.06] flex-wrap">
+      <div className="flex items-center gap-4 mb-4 p-4 rounded-2xl bg-white/[0.035] border border-white/[0.07] flex-wrap shadow-lg shadow-black/10">
         <span className="text-[11px] text-white/40">全局设置</span>
 
         {/* models */}
@@ -449,11 +593,11 @@ export default function ProducerPanel() {
             return (
               <button
                 key={m.id}
-                onClick={() => setGlobalModel(m.id)}
+                onClick={() => applyGlobalModel(m.id)}
                 className={`px-3 py-1.5 rounded-lg text-[11px] transition-all ${
                   active
-                    ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
-                    : 'bg-white/[0.03] text-white/40 border border-white/[0.06] hover:border-white/[0.12]'
+                    ? 'bg-cyan-400/15 text-cyan-200 border border-cyan-300/30 shadow-[0_0_18px_rgba(34,211,238,0.08)]'
+                    : 'bg-white/[0.03] text-white/45 border border-white/[0.06] hover:text-white/70 hover:border-white/[0.14]'
                 }`}
               >
                 <span className={`text-[8px] mr-1 px-1 py-0.5 rounded ${active ? 'bg-violet-500/30' : 'bg-white/[0.06]'}`}>
@@ -474,10 +618,10 @@ export default function ProducerPanel() {
             return (
               <button
                 key={s.value}
-                onClick={() => setGlobalSize(s.value)}
+                onClick={() => applyGlobalSize(s.value)}
                 className={`px-3 py-1.5 rounded-lg text-[11px] transition-all ${
                   active
-                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    ? 'bg-amber-400/15 text-amber-200 border border-amber-300/30'
                     : 'bg-white/[0.03] text-white/40 border border-white/[0.06] hover:border-white/[0.12]'
                 }`}
               >
@@ -492,20 +636,27 @@ export default function ProducerPanel() {
         {/* Import from script */}
         <button
           onClick={importFromScript}
-          className="px-4 py-2 rounded-xl border border-yellow-500/25 bg-yellow-500/10 text-yellow-400 text-[11px] font-medium hover:bg-yellow-500/20 transition-all"
+          disabled={importing}
+          className="px-4 py-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-200 text-[11px] font-medium hover:bg-cyan-300/15 transition-all disabled:opacity-40"
         >
-          从剧本导入
+          {importing ? '导入中...' : '导入真实剧本'}
         </button>
 
         {/* Batch generate */}
         <button
           onClick={submitAll}
           disabled={!hasAnyPrompt}
-          className="px-5 py-2 rounded-xl bg-gradient-to-r from-yellow-500 to-rose-500 text-white text-[12px] font-medium hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-amber-300 text-slate-950 text-[12px] font-bold hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-cyan-500/10"
         >
           批量生成
         </button>
       </div>
+
+      {panelNotice && (
+        <div className="mb-5 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-4 py-3 text-xs text-cyan-100/75">
+          {panelNotice}
+        </div>
+      )}
 
       {/* ── Shot Cards ─────────────────────────────────────────────── */}
       <div className="space-y-4">

@@ -33,7 +33,7 @@ class VideoService:
     @property
     def api_key(self) -> str:
         """惰性读取 API key，避免模块导入时 .env 尚未加载"""
-        return os.getenv("DASHSCOPE_API_KEY", "")
+        return os.getenv("DASHSCOPE_API_KEY") or settings.DASHSCOPE_API_KEY or ""
 
     async def submit_task(
         self,
@@ -52,10 +52,10 @@ class VideoService:
         if not self.api_key:
             raise ValueError("DASHSCOPE_API_KEY 未设置")
 
-        model = model or settings.VIDEO_MODEL_DEFAULT
+        model = self.normalize_model(model or settings.VIDEO_MODEL_DEFAULT)
 
         VS = _get_video_synthesis()
-        if not VS:
+        if not VS or model.startswith(("happyhorse-", "wanx")):
             return await self._submit_task_http(
                 prompt=prompt,
                 model=model,
@@ -136,13 +136,11 @@ class VideoService:
         seed: int | None = None,
     ) -> dict:
         """DashScope HTTP async task API fallback for SDK versions without VideoSynthesis."""
+        model = self.normalize_model(model)
         resolution, ratio = self._normalize_video_size(size)
-        parameters = {
-            "duration": duration,
-            "watermark": False,
-        }
+        parameters = {"watermark": False}
         if model.startswith("happyhorse-"):
-            parameters.update({"resolution": resolution, "ratio": ratio})
+            parameters.update({"duration": duration, "resolution": resolution, "ratio": ratio})
         else:
             parameters.update({"size": size, "prompt_extend": prompt_extend})
         if seed is not None:
@@ -200,6 +198,24 @@ class VideoService:
         if output.get("code"):
             result["code"] = output["code"]
         return result
+
+    @staticmethod
+    def normalize_model(model: str | None) -> str:
+        """Normalize UI/legacy aliases to real DashScope video model ids."""
+        aliases = {
+            "wan2.1-t2v-turbo": "wanx2.1-t2v-turbo",
+            "wan2.1-t2v-plus": "wanx2.1-t2v-plus",
+            "wan-turbo": "wanx2.1-t2v-turbo",
+            "wan-plus": "wanx2.1-t2v-plus",
+            "one-turbo": "wanx2.1-t2v-turbo",
+            "one-plus": "wanx2.1-t2v-plus",
+            "happyhorse": settings.HAPPYHORSE_T2V_MODEL,
+            "hobby-house": settings.HAPPYHORSE_T2V_MODEL,
+            "hobbyhouse": settings.HAPPYHORSE_T2V_MODEL,
+            "happyhorse-one": settings.HAPPYHORSE_T2V_MODEL,
+        }
+        value = (model or settings.VIDEO_MODEL_DEFAULT).strip()
+        return aliases.get(value, value)
 
     @staticmethod
     def _normalize_video_size(size: str) -> tuple[str, str]:

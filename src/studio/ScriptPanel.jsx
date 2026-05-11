@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import { streamRequest, continueScriptStream } from '../services/api'
 import StepNav from './StepNav'
 
@@ -28,6 +29,7 @@ const SUGGESTED_PROMPTS = [
 ]
 
 const STAGES_LABELS = { prophet: '舆情分析', soul: '角色建模', arbiter: '决策设计', outline: '大纲生成', script: '剧本撰写' }
+const scriptStorageKey = (projectId) => `dramagenius:script-drafts:${projectId || 'global'}`
 
 // ── Markdown renderer (regex-based, no lib) ────────────────
 function renderMarkdown(text) {
@@ -70,11 +72,15 @@ function countStats(text) {
 
 // ── Component ──────────────────────────────────────────────
 export default function ScriptPanel() {
+  const { projectId } = useParams()
+  const savedDraft = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem(scriptStorageKey(projectId)) || 'null') } catch { return null }
+  }, [projectId])
   const [concept, setConcept] = useState('')
-  const [episodes, setEpisodes] = useState(() => ENABLE_DEMO_DATA ? DEMO_EPISODES : [])
-  const [activeEp, setActiveEp] = useState(0)
+  const [episodes, setEpisodes] = useState(() => savedDraft?.episodes?.map(({ content, ...ep }) => ep) || (ENABLE_DEMO_DATA ? DEMO_EPISODES : []))
+  const [activeEp, setActiveEp] = useState(() => savedDraft?.activeEp || 0)
   const [generating, setGenerating] = useState(false)
-  const [streamText, setStreamText] = useState(() => ENABLE_DEMO_DATA ? (DEMO_SCRIPTS['ep-1'] || '') : '')
+  const [streamText, setStreamText] = useState(() => savedDraft?.episodes?.[savedDraft?.activeEp || 0]?.content || (ENABLE_DEMO_DATA ? (DEMO_SCRIPTS['ep-1'] || '') : ''))
   const [stageInfo, setStageInfo] = useState({ current: '', label: '' })
   const [showNewInput, setShowNewInput] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -82,6 +88,26 @@ export default function ScriptPanel() {
   const cancelRef = useRef(null)
   const editorRef = useRef(null)
   const episodeCache = useRef({})  // 缓存每集编辑内容
+
+  useEffect(() => {
+    if (savedDraft?.episodes?.length) {
+      episodeCache.current = Object.fromEntries(savedDraft.episodes.map(ep => [ep.id, ep.content || '']))
+    }
+  }, [savedDraft])
+
+  useEffect(() => {
+    const allEpisodes = episodes.map((ep, idx) => ({
+      ...ep,
+      content: idx === activeEp ? streamText : (episodeCache.current[ep.id] || ''),
+    }))
+    try {
+      localStorage.setItem(scriptStorageKey(projectId), JSON.stringify({
+        activeEp,
+        episodes: allEpisodes,
+        updatedAt: new Date().toISOString(),
+      }))
+    } catch {}
+  }, [projectId, episodes, activeEp, streamText])
 
   // Cleanup SSE on unmount
   useEffect(() => {
@@ -139,7 +165,7 @@ export default function ScriptPanel() {
     setStageInfo({ current: '', label: '' })
 
     if (USE_REAL_API) {
-      cancelRef.current = streamRequest('/workspace/generate-plan', { concept }, {
+      cancelRef.current = streamRequest('/workspace/generate-plan', { concept, project_id: projectId }, {
         onMessage: (data, event) => {
           if (event === 'stage_start') {
             setStageInfo({ current: data.stage, label: data.label || STAGES_LABELS[data.stage] || data.stage })
@@ -155,6 +181,17 @@ export default function ScriptPanel() {
               })))
             }
           } else if (event === 'done') {
+            if (data.result?.outline?.episodes?.length) {
+              const text = data.result.outline.episodes.map((ep, idx) => {
+                const scenes = ep.key_scenes || ep.scenes || []
+                return [
+                  `# 第${idx + 1}集 · ${ep.title || ''}`,
+                  ep.summary || ep.synopsis || '',
+                  ...scenes.map((scene, sidx) => `\n## 分镜 ${sidx + 1}\n画面描述：${typeof scene === 'string' ? scene : (scene.visual || scene.description || scene.content || '')}\n台词：${typeof scene === 'object' ? (scene.dialogue || scene.audio || '') : ''}`),
+                ].filter(Boolean).join('\n')
+              }).join('\n\n---\n\n')
+              if (text.trim()) setStreamText(text)
+            }
             setGenerating(false)
           } else if (event === 'error') {
             console.error('SSE error:', data); setGenerating(false)
@@ -190,7 +227,14 @@ export default function ScriptPanel() {
 
     if (USE_REAL_API) {
       cancelRef.current = continueScriptStream(
-        { concept, existing_script: streamText },
+        {
+          project_id: projectId,
+          episode_number: activeEp + 1,
+          context_scenes: [{ type: 'narration', content: streamText }],
+          characters: [],
+          mood: '紧张',
+          instruction: concept || '延续当前剧本，补充下一段分镜和台词',
+        },
         {
           onText: (data) => {
             const t = typeof data === 'string' ? data : data.text || data.content || ''

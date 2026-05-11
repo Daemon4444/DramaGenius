@@ -59,10 +59,10 @@ function Toast({ message, onDone }) {
    Progress Bar (data-driven)
    ───────────────────────────────────────────── */
 
-function ProgressBar({ projectId, collapsed }) {
-  const completed = ENABLE_DEMO_DATA ? (STEP_COMPLETION[projectId] || []) : []
-  const total = NAV_ITEMS.length
-  const count = completed.length
+function ProgressBar({ completedSteps = [], collapsed }) {
+  const completed = completedSteps.filter(step => step !== 'demo')
+  const total = NAV_ITEMS.length - 1
+  const count = Math.min(completed.length, total)
   const pct = Math.round((count / total) * 100)
 
   return (
@@ -77,7 +77,7 @@ function ProgressBar({ projectId, collapsed }) {
       </div>
       <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[#F59E0B] via-[#8B5CF6] to-[#E11D48] transition-all duration-700 ease-out"
+          className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-amber-300 to-rose-300 transition-all duration-700 ease-out"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -176,10 +176,10 @@ function ExportDropdown({ onExport, disabled }) {
    Project Status Badge
    ───────────────────────────────────────────── */
 
-function StatusBadge({ projectId }) {
-  const completed = STEP_COMPLETION[projectId] || []
-  const total = NAV_ITEMS.length
-  const isComplete = completed.length === total
+function StatusBadge({ completedSteps = [] }) {
+  const completed = completedSteps.filter(step => step !== 'demo')
+  const total = NAV_ITEMS.length - 1
+  const isComplete = completed.length >= total
   const isEmpty = completed.length === 0
 
   let statusText = '进行中'
@@ -212,9 +212,31 @@ export default function StudioLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [toast, setToast] = useState(null)
   const [exporting, setExporting] = useState(false)
+  const [projectMeta, setProjectMeta] = useState(null)
 
-  const projectTitle = PROJECT_TITLES[projectId] || projectId || '未命名项目'
-  const completedSteps = STEP_COMPLETION[projectId] || []
+  useEffect(() => {
+    let alive = true
+    if (!projectId) return
+    workspaceApi.getProject(projectId)
+      .then(data => {
+        if (!alive) return
+        const completed = [
+          'overview',
+          data.outline ? 'prophet' : null,
+          data.characters?.length ? 'soul' : null,
+          data.decisions?.length ? 'arbiter' : null,
+          data.episodes?.length ? 'script' : null,
+        ].filter(Boolean)
+        setProjectMeta({ ...data, completedSteps: completed })
+      })
+      .catch(() => {
+        if (alive) setProjectMeta(null)
+      })
+    return () => { alive = false }
+  }, [projectId, location.pathname])
+
+  const projectTitle = projectMeta?.title || (ENABLE_DEMO_DATA ? PROJECT_TITLES[projectId] : null) || projectId || '未命名项目'
+  const completedSteps = projectMeta?.completedSteps || (ENABLE_DEMO_DATA ? (STEP_COMPLETION[projectId] || []) : ['overview'])
 
   const activeIdx = NAV_ITEMS.findIndex(item =>
     location.pathname.includes(`/${item.path}`)
@@ -261,32 +283,32 @@ export default function StudioLayout() {
   }, [projectId, exporting, resolveDownloadUrl])
 
   return (
-    <div className="min-h-screen bg-[#131320] flex">
+    <div className="min-h-screen bg-[#0f1117] flex text-slate-100">
       {/* ── Toast ── */}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
 
       {/* ── Sidebar ── */}
       <aside
         className={`
-          flex-shrink-0 border-r border-white/[0.06] bg-surface-50/50 flex flex-col
+          flex-shrink-0 border-r border-white/[0.07] bg-[#11141d]/95 flex flex-col shadow-2xl shadow-black/20
           transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden
           ${collapsed ? 'w-[60px]' : 'w-[220px]'}
         `}
       >
         {/* Brand header */}
-        <div className="h-14 flex items-center px-3 border-b border-white/[0.06] gap-2.5 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#F59E0B]/20 via-[#8B5CF6]/20 to-[#E11D48]/20 border border-white/[0.08] flex items-center justify-center flex-shrink-0">
-            <span className="font-display font-bold text-sm text-white/50">D</span>
+        <div className="h-16 flex items-center px-3 border-b border-white/[0.07] gap-2.5 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-300/20 via-amber-300/15 to-rose-300/10 border border-white/[0.1] flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-500/5">
+            <span className="font-display font-bold text-sm text-cyan-100/80">D</span>
           </div>
           <div
             className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
               collapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'
             }`}
           >
-            <div className="text-sm font-display font-bold text-white/70 truncate whitespace-nowrap">DramaGenius</div>
+            <div className="text-sm font-display font-bold text-white/80 truncate whitespace-nowrap">DramaGenius</div>
             <div className="flex items-center gap-2">
               <span className="text-[9px] text-white/25 font-mono whitespace-nowrap">Studio</span>
-              <StatusBadge projectId={projectId} />
+              <StatusBadge completedSteps={completedSteps} />
             </div>
           </div>
         </div>
@@ -294,7 +316,7 @@ export default function StudioLayout() {
         {/* Back button */}
         <button
           onClick={() => navigate('/studio/projects')}
-          className="flex items-center gap-2 px-4 py-2.5 text-[11px] text-white/30 hover:text-white/60 hover:bg-white/[0.02] transition-all duration-200 border-b border-white/[0.04] flex-shrink-0"
+          className="flex items-center gap-2 px-4 py-3 text-[11px] text-white/35 hover:text-cyan-100 hover:bg-cyan-300/[0.04] transition-all duration-200 border-b border-white/[0.05] flex-shrink-0"
         >
           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -321,8 +343,8 @@ export default function StudioLayout() {
                     'relative flex items-center gap-3 rounded-xl text-[12px] transition-all duration-200 group',
                     collapsed ? 'px-0 py-2.5 justify-center' : 'px-3 py-2.5',
                     isActive
-                      ? 'bg-white/[0.06] text-white/90 shadow-[0_1px_3px_rgba(0,0,0,0.3)]'
-                      : 'text-white/40 hover:text-white/60 hover:bg-white/[0.03]',
+                      ? 'bg-gradient-to-r from-cyan-300/[0.12] to-amber-300/[0.06] text-cyan-50 border border-cyan-300/[0.16] shadow-[0_8px_22px_rgba(0,0,0,0.18)]'
+                      : 'text-white/42 hover:text-white/75 hover:bg-white/[0.04]',
                   ].join(' ')
                 }
               >
@@ -360,7 +382,7 @@ export default function StudioLayout() {
         </nav>
 
         {/* Progress bar */}
-        <ProgressBar projectId={projectId} collapsed={collapsed} />
+        <ProgressBar completedSteps={completedSteps} collapsed={collapsed} />
 
         {/* Collapse toggle */}
         <button
@@ -380,7 +402,7 @@ export default function StudioLayout() {
       {/* ── Main content area ── */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-14 flex items-center justify-between px-6 border-b border-white/[0.06] bg-surface-50/30 backdrop-blur-md flex-shrink-0">
+        <header className="h-16 flex items-center justify-between px-6 border-b border-white/[0.07] bg-[#11141d]/85 backdrop-blur-xl flex-shrink-0 shadow-lg shadow-black/10">
           {/* Left: Breadcrumb + project title */}
           <div className="flex flex-col justify-center gap-0.5 min-w-0">
             <Breadcrumb projectTitle={projectTitle} activeItem={activeItem} />
@@ -395,14 +417,14 @@ export default function StudioLayout() {
               ID: {projectId?.slice(0, 12)}
             </span>
             <ExportDropdown onExport={handleExport} disabled={exporting} />
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#8B5CF6]/30 to-[#F59E0B]/30 flex items-center justify-center text-[10px] text-white/60 ring-1 ring-white/[0.06]">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-300/25 to-amber-300/20 flex items-center justify-center text-[10px] text-white/70 ring-1 ring-white/[0.08]">
               U
             </div>
           </div>
         </header>
 
         {/* Content — child routes */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.055),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(251,191,36,0.04),transparent_30%)]">
           <Outlet />
         </div>
       </main>

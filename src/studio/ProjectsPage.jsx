@@ -81,6 +81,8 @@ const SORT_OPTIONS = [
   { key: 'createdAt', label: '创建时间' },
 ]
 
+const WORKFLOW_ORDER = ['overview', 'prophet', 'soul', 'arbiter', 'script', 'producer']
+
 const GENRE_CHIPS = [
   '甜宠', '虐恋', '悬疑', '科幻', '古装', '都市', '玄幻', '喜剧', '校园', '穿越',
 ]
@@ -107,6 +109,13 @@ function formatWordCount(count) {
   if (count >= 10000) return `${(count / 10000).toFixed(1)}万`
   if (count >= 1000) return `${(count / 1000).toFixed(1)}k`
   return String(count)
+}
+
+function nextProjectStep(project) {
+  if (DEMO_LANDING[project.id]) return DEMO_LANDING[project.id]
+  const stages = project.stages || {}
+  if (!project.progress) return 'overview'
+  return WORKFLOW_ORDER.slice(1).find(step => !stages[step]) || 'producer'
 }
 
 /* ─── Delete Confirmation Dialog ─── */
@@ -243,12 +252,18 @@ export default function ProjectsPage() {
               title: p.title,
               concept: p.concept || p.genre || '新建项目',
               status: p.status || 'draft',
-              progress: _calcProgress(p),
+              progress: p.progress ?? _calcProgress(p),
               updatedAt: p.updated_at || p.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
               createdAt: p.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
               wordCount: p.word_count || 0,
               episodeCount: p.episode_count || 0,
-              stages: { prophet: false, soul: false, arbiter: false, script: false, producer: false },
+              stages: p.stages || {
+                prophet: !!p.outline,
+                soul: (p.character_count || p.characters?.length || 0) > 0,
+                arbiter: (p.decision_count || p.decisions?.length || 0) > 0,
+                script: (p.episode_count || p.episodes?.length || 0) > 0,
+                producer: (p.production_count || 0) > 0,
+              },
             }
           })
           if (ENABLE_DEMO_DATA) {
@@ -276,10 +291,14 @@ export default function ProjectsPage() {
 
   const _calcProgress = (project) => {
     const stages = ['prophet', 'soul', 'arbiter', 'script', 'producer']
-    let completed = 0
-    if (project.outline) completed += 2
-    if (project.characters?.length > 0) completed += 1
-    if (project.episodes?.length > 0) completed += 1
+    const stageState = project.stages || {
+      prophet: !!project.outline,
+      soul: (project.character_count || project.characters?.length || 0) > 0,
+      arbiter: (project.decision_count || project.decisions?.length || 0) > 0,
+      script: (project.episode_count || project.episodes?.length || 0) > 0,
+      producer: (project.production_count || 0) > 0,
+    }
+    const completed = stages.filter(stage => stageState[stage]).length
     return Math.round((completed / stages.length) * 100)
   }
 
@@ -407,8 +426,8 @@ export default function ProjectsPage() {
       return (
         <div
           key={proj.id}
-          className="group flex items-center gap-5 px-5 py-4 rounded-xl bg-surface-100/50 border border-white/[0.06] hover:border-white/[0.12] hover:bg-surface-100 transition-all cursor-pointer animate-fade-up"
-          onClick={() => navigate(`/studio/project/${proj.id}/${DEMO_LANDING[proj.id] || 'overview'}`)}
+          className="group flex items-center gap-5 px-5 py-4 rounded-2xl bg-white/[0.035] border border-white/[0.07] hover:border-cyan-300/20 hover:bg-white/[0.055] transition-all cursor-pointer animate-fade-up shadow-lg shadow-black/5"
+          onClick={() => navigate(`/studio/project/${proj.id}/${nextProjectStep(proj)}`)}
         >
           {/* Left: title + concept */}
           <div className="flex-1 min-w-0">
@@ -465,8 +484,8 @@ export default function ProjectsPage() {
     return (
       <div
         key={proj.id}
-        onClick={() => navigate(`/studio/project/${proj.id}/${DEMO_LANDING[proj.id] || 'overview'}`)}
-        className="group p-5 rounded-2xl bg-surface-100/50 border border-white/[0.06] hover:border-white/[0.12] hover:bg-surface-100 transition-all cursor-pointer animate-fade-up"
+        onClick={() => navigate(`/studio/project/${proj.id}/${nextProjectStep(proj)}`)}
+        className="group p-5 rounded-2xl bg-white/[0.035] border border-white/[0.07] hover:border-cyan-300/20 hover:bg-white/[0.055] transition-all cursor-pointer animate-fade-up shadow-lg shadow-black/5"
       >
         {/* Header: title + status + delete */}
         <div className="flex items-start justify-between mb-3">
@@ -515,9 +534,9 @@ export default function ProjectsPage() {
 
         {/* Progress bar */}
         <div className="mb-4">
-          <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+          <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-prophet via-soul to-arbiter transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-amber-300 to-rose-300 transition-all duration-500"
               style={{ width: `${proj.progress}%` }}
             />
           </div>
