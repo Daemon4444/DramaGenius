@@ -84,7 +84,7 @@ class QwenService:
             {"role": "system", "content": PROMPT_TEMPLATES["prophet_analyze"]},
             {"role": "user", "content": raw_data},
         ]
-        return await self.chat(messages, model=settings.QWEN_MODEL_PLUS, max_tokens=800)
+        return await self.chat(messages, model=settings.QWEN_MODEL_PLUS, max_tokens=2000)
 
     async def generate_characters(self, concept: str) -> str:
         """Soul: 角色生成（轻量版，生成 3 个核心角色）"""

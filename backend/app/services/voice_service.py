@@ -140,7 +140,6 @@ class VoiceService:
             target_model=target_model,
             prefix=prefix,
             url=audio_url,
-            language_hints=["zh"],
         )
         return voice_id
 

@@ -58,11 +58,12 @@ class StorageService:
         bucket = oss2.Bucket(auth, settings.OSS_ENDPOINT, self.bucket_name)
         bucket.put_object(object_key, data, headers={"Content-Type": content_type})
 
-        if settings.OSS_PUBLIC_BASE_URL:
-            return f"{settings.OSS_PUBLIC_BASE_URL.rstrip('/')}/{object_key}"
-
-        public_host = f"https://{self.bucket_name}.{settings.OSS_ENDPOINT.strip('/')}"
-        return f"{public_host}/{object_key}"
+        # 生成签名 URL（1小时有效），因为 bucket 阻止了公共访问
+        # 使用公网 endpoint 生成签名 URL（内网 endpoint 外部不可访问）
+        public_endpoint = settings.OSS_ENDPOINT.replace("-internal", "")
+        public_bucket = oss2.Bucket(auth, public_endpoint, self.bucket_name)
+        signed_url = public_bucket.sign_url("GET", object_key, 3600)
+        return signed_url
 
 
 storage_service = StorageService()
