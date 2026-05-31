@@ -3,8 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { prophetApi } from '../services/api'
 import StepNav from './StepNav'
 
-const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
-
 const PLATFORMS = ['抖音', '微博', '小红书', 'B站', '快手', '知乎']
 
 const SUGGESTIONS = [
@@ -148,37 +146,20 @@ export default function ProphetPanel() {
     setSelectedTopics([])
     const startTime = Date.now()
     try {
-      if (USE_REAL_API) {
-        const data = await prophetApi.analyze(query)
-        const keywords = formatKeywords(data.keywords || [])
-        setResult({
-          keywords,
-          summary: data.sentiment?.summary || `基于「${query}」的分析，发现 ${keywords.length} 个相关热点方向。`,
-        })
-      } else {
-        await new Promise(r => setTimeout(r, 1500))
-        setResult({
-          keywords: [
-            { word: '霸总甜宠', heat: 95, trend: 'up', platforms: ['抖音', '快手'], volume: '2.3亿' },
-            { word: '逆袭复仇', heat: 88, trend: 'up', platforms: ['抖音', '微博'], volume: '1.8亿' },
-            { word: '穿越重生', heat: 82, trend: 'stable', platforms: ['抖音', '小红书'], volume: '1.5亿' },
-            { word: '甜宠日常', heat: 78, trend: 'up', platforms: ['抖音', 'B站'], volume: '1.2亿' },
-            { word: '虐恋情深', heat: 72, trend: 'down', platforms: ['微博', '小红书'], volume: '9800万' },
-          ],
-          summary: `基于「${query}」的分析，当前短剧市场热度最高的方向集中在甜宠类和逆袭类题材，抖音平台贡献了最大流量。`,
-        })
-      }
+      const data = await prophetApi.analyze(query)
+      const keywords = formatKeywords(data.keywords || [])
+      setResult({
+        keywords,
+        summary: data.sentiment?.summary || `基于「${query}」的分析，发现 ${keywords.length} 个相关热点方向。`,
+      })
       const now = new Date()
       setAnalysisTime(now)
       setHistory(prev => [{ query: query.trim(), timestamp: now.toISOString() }, ...prev.filter(h => h.query !== query.trim())].slice(0, 20))
     } catch (err) {
       console.error('分析失败:', err)
       setResult({
-        keywords: [
-          { word: '职场复仇', heat: 90, trend: 'up', platforms: ['抖音'], volume: '1.5亿' },
-          { word: '现代甜宠', heat: 85, trend: 'stable', platforms: ['微博'], volume: '1.2亿' },
-        ],
-        summary: `分析「${query}」时遇到问题，显示模拟数据供参考。`,
+        keywords: [],
+        summary: `分析「${query}」时遇到问题，请检查网络连接后重试。`,
       })
       setAnalysisTime(new Date())
     } finally {
@@ -248,7 +229,7 @@ export default function ProphetPanel() {
           onChange={e => setQuery(e.target.value)}
           placeholder="输入你的创作方向，如：都市甜宠、古装复仇、悬疑推理..."
           className="flex-1 px-5 py-3.5 rounded-xl bg-surface-200 border border-white/[0.08] text-sm text-white/80 placeholder-white/20 focus:border-amber-500/40 focus:outline-none transition-colors"
-          onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
+          onKeyDown={e => e.key === 'Enter' && !e.isComposing && handleAnalyze()}
         />
         <button
           onClick={handleAnalyze}

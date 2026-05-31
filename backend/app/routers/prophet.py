@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, Literal
 
 from app.models.database import get_db
 from app.models.project import ProphetSnapshot
@@ -20,6 +20,7 @@ settings = get_settings()
 
 class AnalyzeRequest(BaseModel):
     query: str
+    mode: Literal["realtime", "trend", "compete"] = "realtime"
     project_id: Optional[str] = None
     use_cache: bool = True  # 是否使用缓存的 ES 数据
 
@@ -71,7 +72,7 @@ async def analyze_trends(
                 )
 
         # Step 2: 调用千问分析
-        result_str = await qwen_service.analyze_trends(raw_data)
+        result_str = await qwen_service.analyze_trends(raw_data, mode=req.mode)
 
         # Step 3: 解析 JSON（兼容 Qwen3 thinking 标签和 code fence）
         try:

@@ -195,6 +195,7 @@ export default function ProphetSection() {
   const [apiTrends, setApiTrends] = useState(null)         // 趋势数据
   const [showSourcePanel, setShowSourcePanel] = useState(false)  // 溯源面板展开
   const [apiError, setApiError] = useState(null)
+  const [modeCache, setModeCache] = useState({})  // { "query::mode": {keywords, sentiment, hotTopics, trends} }
 
   useEffect(() => {
     const target = 1_000_000
@@ -211,33 +212,48 @@ export default function ProphetSection() {
   }, [])
 
   // ─── 搜索分析处理 ───
-  const handleSearchAnalyze = useCallback(async () => {
+  const handleSearchAnalyze = useCallback(async (modeOverride) => {
+    const mode = modeOverride || activeMode
     if (!searchQuery.trim() || isAnalyzing) return
+
+    // 检查缓存
+    const cacheKey = `${searchQuery}::${mode}`
+    if (modeCache[cacheKey]) {
+      const cached = modeCache[cacheKey]
+      setApiKeywords(cached.keywords)
+      setApiSentiment(cached.sentiment)
+      setApiHotTopics(cached.hotTopics)
+      setApiTrends(cached.trends)
+      setShowSourcePanel(true)
+      return
+    }
 
     setIsAnalyzing(true)
     setApiError(null)
 
     try {
       if (USE_REAL_API) {
-        const result = await prophetApi.analyze(searchQuery)
+        const result = await prophetApi.analyze(searchQuery, mode)
         const kws = result.keywords || []
         setApiKeywords(kws)
         // 情感分布：优先从原始计数计算，否则从关键词 sentiment_score×volume 聚合
         const rawSent = result.sentiment || {}
+        let sentiment = null
         if (rawSent.total_count > 0) {
-          setApiSentiment(computeSentiment(
+          sentiment = computeSentiment(
             rawSent.positive_count || 0,
             rawSent.neutral_count || 0,
             rawSent.negative_count || 0
-          ))
+          )
         } else if (kws.length > 0) {
           // 旧格式兼容：从关键词级别数据聚合真实情感分布
-          setApiSentiment(computeSentimentFromKeywords(kws))
+          sentiment = computeSentimentFromKeywords(kws)
         } else if (rawSent.positive != null) {
-          setApiSentiment(rawSent)
+          sentiment = rawSent
         }
+        setApiSentiment(sentiment)
         // 从原始维度计算热门话题热度
-        setApiHotTopics((result.hot_topics || []).map(t => ({
+        const hotTopics = (result.hot_topics || []).map(t => ({
           ...t,
           heat: calcHeatScore(
             t.mentions || 0,
@@ -245,9 +261,10 @@ export default function ProphetSection() {
             t.sentiment_score || 0,
             t.platform_count || 1
           )
-        })))
+        }))
+        setApiHotTopics(hotTopics)
         // 从原始维度计算趋势置信度
-        setApiTrends((result.trends || []).map(t => ({
+        const trends = (result.trends || []).map(t => ({
           ...t,
           confidence: calcTrendConfidence(
             t.data_volume || 0,
@@ -255,8 +272,11 @@ export default function ProphetSection() {
             t.cross_platform || 0,
             t.recency_days || 7
           ) / 100
-        })))
+        }))
+        setApiTrends(trends)
         setShowSourcePanel(true)
+        // 存入缓存
+        setModeCache(prev => ({ ...prev, [cacheKey]: { keywords: kws, sentiment, hotTopics, trends } }))
       } else {
         // Mock 模式：模拟延迟和结果（所有数值由公式计算）
         await new Promise(r => setTimeout(r, 1500))
@@ -276,7 +296,7 @@ export default function ProphetSection() {
     } finally {
       setIsAnalyzing(false)
     }
-  }, [searchQuery, isAnalyzing])
+  }, [searchQuery, isAnalyzing, activeMode, modeCache])
 
   // 合并 API 返回的关键词到当前显示（score 由公式实时计算）
   const currentKeywords = useMemo(() => {
@@ -389,6 +409,9 @@ export default function ProphetSection() {
                 onClick={() => {
                   setActiveMode(mode.id)
                   setExpandedKw(null)
+                  if (searchQuery.trim() && apiKeywords) {
+                    handleSearchAnalyze(mode.id)
+                  }
                 }}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   activeMode === mode.id
@@ -427,7 +450,7 @@ export default function ProphetSection() {
                 className="flex-1 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white/80 placeholder-white/25 text-sm focus:outline-none focus:border-prophet/40 transition-all"
               />
               <button
-                onClick={handleSearchAnalyze}
+                onClick={() => handleSearchAnalyze()}
                 disabled={!searchQuery.trim() || isAnalyzing}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-prophet/80 to-prophet text-white font-medium text-sm transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
               >

@@ -11,6 +11,33 @@ PROMPT_TEMPLATES = {
 ```
 keywords 5个(volume为提及量,growth_pct为增长率%,sentiment_score为情感值0-100,platform_count为覆盖平台数)，trends 2个(data_volume为数据量,consistency为一致性0-1,cross_platform为平台数,recency_days为距今天数)，suggestions 2条，hot_topics 3个(mentions为提及量,growth_pct为增长率%)。只输出JSON代码块，不加解释。""",
 
+    # ── Prophet: 实时热点模式 ──
+    "prophet_realtime": """实时热点舆情分析。聚焦24小时内爆发性热点、病毒式传播内容和实时话题热度。
+keywords应选择正在爆发或24h内快速增长的话题，growth_pct体现短期爆发力；trends侧重24h-72h内的爆发趋势；suggestions聚焦如何借势当下热点；hot_topics选择此刻最火的话题。
+输出精简JSON，字段严格如下：
+```json
+{"keywords":[{"word":"词","volume":15000,"growth_pct":45.5,"sentiment_score":78,"platform_count":3,"trend":"rising","sources":["抖音","微博"]}],"trends":[{"title":"趋势名","description":"30字描述","data_volume":20000,"consistency":0.75,"cross_platform":3,"recency_days":3}],"sentiment":{"positive_count":600,"neutral_count":250,"negative_count":150,"total_count":1000,"summary":"10字概括"},"suggestions":[{"type":"题材","content":"建议"}],"hot_topics":[{"topic":"话题","mentions":30000,"growth_pct":85,"sentiment_score":80,"platform_count":4,"platform":"微博","sample_content":"内容"}]}
+```
+keywords 5个, trends 2个, suggestions 2条, hot_topics 3个。只输出JSON代码块，不加解释。""",
+
+    # ── Prophet: 趋势预测模式 ──
+    "prophet_trend": """短剧趋势预测分析。聚焦新兴赛道、增长轨迹和未来30-90天趋势预测。
+keywords应选择尚在萌芽但增长潜力大的新兴题材，growth_pct体现中长期增长趋势；trends侧重未来1-3个月的赛道走向预测和拐点判断；suggestions聚焦提前布局哪些新兴方向；hot_topics选择具有持续增长潜力的话题而非短期爆款。
+输出精简JSON，字段严格如下：
+```json
+{"keywords":[{"word":"词","volume":15000,"growth_pct":45.5,"sentiment_score":78,"platform_count":3,"trend":"rising","sources":["抖音","微博"]}],"trends":[{"title":"趋势名","description":"30字描述","data_volume":20000,"consistency":0.75,"cross_platform":3,"recency_days":3}],"sentiment":{"positive_count":600,"neutral_count":250,"negative_count":150,"total_count":1000,"summary":"10字概括"},"suggestions":[{"type":"题材","content":"建议"}],"hot_topics":[{"topic":"话题","mentions":30000,"growth_pct":85,"sentiment_score":80,"platform_count":4,"platform":"微博","sample_content":"内容"}]}
+```
+keywords 5个, trends 2个, suggestions 2条, hot_topics 3个。只输出JSON代码块，不加解释。""",
+
+    # ── Prophet: 竞品分析模式 ──
+    "prophet_compete": """短剧竞品分析。聚焦竞争格局、市场空白和差异化机会。
+keywords应选择竞品热门题材和市场空白领域，volume体现市场规模，growth_pct体现竞争激烈程度；trends侧重竞品动向和市场格局变化；suggestions聚焦差异化切入点和蓝海机会；hot_topics选择竞品正在争夺或尚未覆盖的话题。
+输出精简JSON，字段严格如下：
+```json
+{"keywords":[{"word":"词","volume":15000,"growth_pct":45.5,"sentiment_score":78,"platform_count":3,"trend":"rising","sources":["抖音","微博"]}],"trends":[{"title":"趋势名","description":"30字描述","data_volume":20000,"consistency":0.75,"cross_platform":3,"recency_days":3}],"sentiment":{"positive_count":600,"neutral_count":250,"negative_count":150,"total_count":1000,"summary":"10字概括"},"suggestions":[{"type":"题材","content":"建议"}],"hot_topics":[{"topic":"话题","mentions":30000,"growth_pct":85,"sentiment_score":80,"platform_count":4,"platform":"微博","sample_content":"内容"}]}
+```
+keywords 5个, trends 2个, suggestions 2条, hot_topics 3个。只输出JSON代码块，不加解释。""",
+
     # ── Soul: 角色生成 ──
     "soul_character": """短剧角色生成。输出3个核心角色的精简JSON：
 ```json

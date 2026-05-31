@@ -9,11 +9,11 @@ const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true'
 const ENABLE_DEMO_DATA = import.meta.env.VITE_ENABLE_DEMO_DATA === 'true'
 
 const MODELS = [
-  { id: 'happyhorse-1.0-r2v', label: 'HappyHorse R2V', desc: '角色参考图 · 形象一致', badge: '人' },
-  { id: 'wan2.6-r2v-flash', label: 'Wan R2V', desc: '图片/视频参考 · 主体延续', badge: '参' },
-  { id: 'happyhorse-1.0-t2v', label: 'HappyHorse 1.0', desc: '720P/1080P · 有声叙事', badge: '声' },
-  { id: 'wanx2.1-t2v-turbo',  label: 'One Turbo',       desc: 'Wanx 2.1 · 快速预览',   badge: '快' },
-  { id: 'wanx2.1-t2v-plus',   label: 'One Plus',        desc: 'Wanx 2.1 · 高质量',     badge: '精' },
+  { id: 'happyhorse-1.0-r2v', label: 'happyhorse-1.0-r2v', desc: '角色参考图 · 形象一致', badge: '人' },
+  { id: 'wan2.6-r2v-flash',   label: 'wan2.6-r2v-flash',   desc: '图片/视频参考 · 主体延续', badge: '参' },
+  { id: 'happyhorse-1.0-t2v', label: 'happyhorse-1.0-t2v', desc: '720P/1080P · 有声叙事', badge: '声' },
+  { id: 'wan2.6-t2v-turbo',   label: 'wan2.6-t2v-turbo',   desc: 'Wan 2.6 · 快速预览',   badge: '快' },
+  { id: 'wan2.6-t2v-plus',    label: 'wan2.6-t2v-plus',    desc: 'Wan 2.6 · 高质量',     badge: '精' },
 ]
 
 const SIZES = [

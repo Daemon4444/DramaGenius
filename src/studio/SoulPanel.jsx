@@ -263,8 +263,11 @@ function CharacterForm({ character, onChange, onSave, onCancel, isNew }) {
 
   const handleRoleChange = (role) => {
     const roleOpt = ROLE_OPTIONS.find(r => r.value === role)
-    update('role', role)
-    if (roleOpt) update('color', roleOpt.color)
+    onChange({
+      ...character,
+      role,
+      color: roleOpt ? roleOpt.color : character.color,
+    })
   }
 
   /* -- JSON file import for personality/dialogue/memory -- */

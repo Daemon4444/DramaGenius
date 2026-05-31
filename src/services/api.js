@@ -154,8 +154,8 @@ export const authApi = {
 // ============ Prophet 舆情 API ============
 
 export const prophetApi = {
-  async analyze(query) {
-    return api.post('/prophet/analyze', { query });
+  async analyze(query, mode = 'realtime') {
+    return api.post('/prophet/analyze', { query, mode });
   },
 
   async getHotTopics(limit = 10) {

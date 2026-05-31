@@ -78,10 +78,11 @@ class QwenService:
 
     # ── 带 Prompt 模板的便捷方法 ──
 
-    async def analyze_trends(self, raw_data: str) -> str:
-        """Prophet: 舆情分析"""
+    async def analyze_trends(self, raw_data: str, mode: str = "realtime") -> str:
+        """Prophet: 舆情分析 (mode: realtime/trend/compete)"""
+        prompt_key = f"prophet_{mode}" if f"prophet_{mode}" in PROMPT_TEMPLATES else "prophet_analyze"
         messages = [
-            {"role": "system", "content": PROMPT_TEMPLATES["prophet_analyze"]},
+            {"role": "system", "content": PROMPT_TEMPLATES[prompt_key]},
             {"role": "user", "content": raw_data},
         ]
         return await self.chat(messages, model=settings.QWEN_MODEL_PLUS, max_tokens=2000)

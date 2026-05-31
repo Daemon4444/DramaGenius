@@ -1,6 +1,7 @@
 """
 Soul 角色建模路由
 """
+import asyncio
 import json
 import os
 import re
@@ -313,12 +314,19 @@ async def text_to_speech(req: TTSRequest):
     if not settings.DASHSCOPE_API_KEY:
         raise HTTPException(status_code=503, detail="TTS 服务未配置 API Key")
 
-    audio_bytes = await voice_service.synthesize_to_bytes(
-        text=text,
-        voice=req.voice or "longxiaochun_v2",
-        speech_rate=req.speech_rate or 1.0,
-        pitch_rate=req.pitch_rate or 1.0,
-    )
+    try:
+        audio_bytes = await voice_service.synthesize_to_bytes(
+            text=text,
+            voice=req.voice or "longxiaochun_v2",
+            speech_rate=req.speech_rate or 1.0,
+            pitch_rate=req.pitch_rate or 1.0,
+        )
+    except (TimeoutError, asyncio.TimeoutError):
+        raise HTTPException(status_code=504, detail="语音合成超时，请稍后重试")
+    except (ConnectionError, OSError) as e:
+        raise HTTPException(status_code=502, detail=f"语音服务连接失败: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"语音合成异常: {str(e)}")
 
     if not audio_bytes:
         raise HTTPException(status_code=503, detail="语音合成失败，请稍后重试")
